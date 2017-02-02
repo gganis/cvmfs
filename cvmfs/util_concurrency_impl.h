@@ -11,6 +11,7 @@
 namespace CVMFS_NAMESPACE_GUARD {
 #endif
 
+
 //
 // +----------------------------------------------------------------------------
 // |  Future
@@ -34,7 +35,7 @@ Future<T>::~Future() {
 
 template <typename T>
 void Future<T>::Set(const T &object) {
-  MutexLockGuard guard(mutex_);
+  RAII<pthread_mutex_t> guard(mutex_);
   assert(!object_was_set_);
   object_         = object;
   object_was_set_ = true;
@@ -44,7 +45,7 @@ void Future<T>::Set(const T &object) {
 
 template <typename T>
 void Future<T>::Wait() const {
-  MutexLockGuard guard(mutex_);
+  RAII<pthread_mutex_t> guard(mutex_);
   if (!object_was_set_) {
     pthread_cond_wait(&object_set_, &mutex_);
   }
@@ -259,7 +260,7 @@ FifoChannel<T>::~FifoChannel() {
 
 template <class T>
 void FifoChannel<T>::Enqueue(const T &data) {
-  MutexLockGuard lock(mutex_);
+  RAII<pthread_mutex_t> lock(mutex_);
 
   // wait for space in the queue
   while (this->size() >= maximal_queue_length_) {
@@ -276,7 +277,7 @@ void FifoChannel<T>::Enqueue(const T &data) {
 
 template <class T>
 const T FifoChannel<T>::Dequeue() {
-  MutexLockGuard lock(mutex_);
+  RAII<pthread_mutex_t> lock(mutex_);
 
   // wait until there is something to do
   while (this->empty()) {
@@ -298,7 +299,7 @@ const T FifoChannel<T>::Dequeue() {
 
 template <class T>
 unsigned int FifoChannel<T>::Drop() {
-  MutexLockGuard lock(mutex_);
+  RAII<pthread_mutex_t> lock(mutex_);
 
   unsigned int dropped_items = 0;
   while (!this->empty()) {
@@ -314,14 +315,14 @@ unsigned int FifoChannel<T>::Drop() {
 
 template <class T>
 size_t FifoChannel<T>::GetItemCount() const {
-  MutexLockGuard lock(mutex_);
+  RAII<pthread_mutex_t> lock(mutex_);
   return this->size();
 }
 
 
 template <class T>
 bool FifoChannel<T>::IsEmpty() const {
-  MutexLockGuard lock(mutex_);
+  RAII<pthread_mutex_t> lock(mutex_);
   return this->empty();
 }
 
@@ -445,7 +446,7 @@ bool ConcurrentWorkers<WorkerT>::SpawnWorkers() {
 
   // wait for all workers to report in...
   {
-    MutexLockGuard guard(status_mutex_);
+    RAII<pthread_mutex_t> guard(status_mutex_);
     // +1 -> callback thread
     while (workers_started_ < number_of_workers_ + 1) {
       pthread_cond_wait(&worker_started_, &status_mutex_);
@@ -559,7 +560,7 @@ void ConcurrentWorkers<WorkerT>::RunCallbackThread() {
 
 template <class WorkerT>
 void ConcurrentWorkers<WorkerT>::ReportStartedWorker() const {
-  MutexLockGuard lock(status_mutex_);
+  RAII<pthread_mutex_t> lock(status_mutex_);
   ++workers_started_;
   pthread_cond_signal(&worker_started_);
 }
@@ -680,7 +681,7 @@ void ConcurrentWorkers<WorkerT>::WaitForEmptyQueue() const {
 
   // wait until all pending jobs are processed
   {
-    MutexLockGuard lock(jobs_all_done_mutex_);
+    RAII<pthread_mutex_t> lock(jobs_all_done_mutex_);
     while (atomic_read32(&jobs_pending_) > 0) {
       pthread_cond_wait(&jobs_all_done_, &jobs_all_done_mutex_);
     }
