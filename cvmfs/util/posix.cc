@@ -42,6 +42,7 @@
 #include "fs_traversal.h"
 #include "logging.h"
 #include "platform.h"
+#include "util_concurrency.h"
 
 using namespace std;  // NOLINT
 
@@ -49,7 +50,7 @@ using namespace std;  // NOLINT
 namespace CVMFS_NAMESPACE_GUARD {
 #endif
 
-static pthread_mutex_t getumask_mutex = PTHREAD_MUTEX_INITIALIZER;
+static Mutex getumask_mutex;
 
 
 /**
@@ -412,19 +413,6 @@ void Block2Nonblock(int filedes) {
 void SendMsg2Socket(const int fd, const string &msg) {
   (void)send(fd, &msg[0], msg.length(), MSG_NOSIGNAL);
 }
-
-
-void LockMutex(pthread_mutex_t *mutex) {
-  int retval = pthread_mutex_lock(mutex);
-  assert(retval == 0);
-}
-
-
-void UnlockMutex(pthread_mutex_t *mutex) {
-  int retval = pthread_mutex_unlock(mutex);
-  assert(retval == 0);
-}
-
 
 /**
  * set(e){g/u}id wrapper.
@@ -872,10 +860,9 @@ bool GetGidOf(const std::string &groupname, gid_t *gid) {
  *       this function and beware of scalability bottlenecks
  */
 mode_t GetUmask() {
-  LockMutex(&getumask_mutex);
+  MutexLockGuard g(getumask_mutex);
   const mode_t my_umask = umask(0);
   umask(my_umask);
-  UnlockMutex(&getumask_mutex);
   return my_umask;
 }
 
