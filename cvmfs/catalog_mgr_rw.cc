@@ -40,13 +40,16 @@ WritableCatalogManager::WritableCatalogManager(
   unsigned                   min_weight)
   : SimpleCatalogManager(base_hash, stratum0, dir_temp, download_manager,
       statistics)
+  , sync_lock_()
   , spooler_(spooler)
+  , catalog_processing_lock_()
   , catalog_entry_warn_threshold_(catalog_entry_warn_threshold)
   , is_balanceable_(is_balanceable)
   , max_weight_(max_weight)
   , min_weight_(min_weight)
   , balance_weight_(max_weight / 2)
 {
+#if 0
   sync_lock_ =
     reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
   int retval = pthread_mutex_init(sync_lock_, NULL);
@@ -55,14 +58,17 @@ WritableCatalogManager::WritableCatalogManager(
     reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
   retval = pthread_mutex_init(catalog_processing_lock_, NULL);
   assert(retval == 0);
+#endif
 }
 
 
 WritableCatalogManager::~WritableCatalogManager() {
+#if 0
   pthread_mutex_destroy(sync_lock_);
   free(sync_lock_);
   pthread_mutex_destroy(catalog_processing_lock_);
   free(catalog_processing_lock_);
+#endif
 }
 
 

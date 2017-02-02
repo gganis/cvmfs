@@ -6,7 +6,6 @@
 #define CVMFS_AUTHZ_AUTHZ_SESSION_H_
 
 #include <inttypes.h>
-#include <pthread.h>
 #include <unistd.h>
 
 #include <string>
@@ -16,7 +15,7 @@
 #include "murmur.h"
 #include "smallhash.h"
 #include "statistics.h"
-#include "util/single_copy.h"
+#include "util_concurrency.h"
 
 class AuthzFetcher;
 
@@ -137,14 +136,14 @@ class AuthzSessionManager : SingleCopy {
    * Caches (extended) session information for an (extended) pid.
    */
   SmallHashDynamic<PidKey, SessionKey> pid2session_;
-  pthread_mutex_t lock_pid2session_;
+  Mutex lock_pid2session_;
   uint64_t deadline_sweep_pids_;
 
   /**
    * Caches credentials corresponding to a session.
    */
   SmallHashDynamic<SessionKey, AuthzData> session2cred_;
-  pthread_mutex_t lock_session2cred_;
+  Mutex lock_session2cred_;
   uint64_t deadline_sweep_creds_;
 
   /**

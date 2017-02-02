@@ -6,7 +6,6 @@
 #define CVMFS_TRACER_H_ 1
 
 #include <inttypes.h>
-#include <pthread.h>
 #include <sys/time.h>
 
 #include <cstdio>
@@ -14,7 +13,7 @@
 
 #include "atomic.h"
 #include "shortstring.h"
-#include "util/single_copy.h"
+#include "util_concurrency.h"
 
 /**
  * Tracer is a thread-safe logging helper.  It uses a ring buffer
@@ -90,7 +89,9 @@ class Tracer : SingleCopy {
   };
 
   static void *MainFlush(void *data);
+#if 0
   void GetTimespecRel(const int64_t ms, timespec *ts);
+#endif
   int WriteCsvFile(FILE *fp, const std::string &field);
   int32_t DoTrace(const int event,
                   const PathString &path,
@@ -109,10 +110,8 @@ class Tracer : SingleCopy {
    */
   atomic_int32 *commit_buffer_;
   pthread_t thread_flush_;
-  pthread_cond_t sig_flush_;
-  pthread_mutex_t sig_flush_mutex_;
-  pthread_cond_t sig_continue_trace_;
-  pthread_mutex_t sig_continue_trace_mutex_;
+  Condition sig_flush_;
+  Condition sig_continue_trace_;
   /**
    * Starts with 0 and gets incremented by each call to trace.  Contains the first
    * non-used sequence number.

@@ -6,7 +6,7 @@
 #define CVMFS_DOWNLOAD_H_
 
 #include <poll.h>
-#include <pthread.h>
+// #include <pthread.h>
 #include <stdint.h>
 #include <unistd.h>
 
@@ -25,6 +25,7 @@
 #include "prng.h"
 #include "sink.h"
 #include "statistics.h"
+#include "util_concurrency.h"
 
 
 namespace download {
@@ -450,8 +451,8 @@ class DownloadManager {
   uint32_t watch_fds_inuse_;
   uint32_t watch_fds_max_;
 
-  pthread_mutex_t *lock_options_;
-  pthread_mutex_t *lock_synchronous_mode_;
+  Mutex lock_options_;
+  Mutex lock_synchronous_mode_;
   char *opt_dns_server_;
   unsigned opt_timeout_proxy_;
   unsigned opt_timeout_direct_;

@@ -50,6 +50,7 @@ Catalog::Catalog(const PathString &mountpoint,
                  const shash::Any &catalog_hash,
                        Catalog    *parent,
                  const bool        is_nested) :
+  lock_(),
   catalog_hash_(catalog_hash),
   mountpoint_(mountpoint),
   is_regular_mountpoint_(mountpoint_ == root_prefix_),
@@ -63,10 +64,11 @@ Catalog::Catalog(const PathString &mountpoint,
 {
   max_row_id_ = 0;
   inode_annotation_ = NULL;
+#if 0
   lock_ = reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
   int retval = pthread_mutex_init(lock_, NULL);
   assert(retval == 0);
-
+#endif
   database_ = NULL;
   uid_map_ = NULL;
   gid_map_ = NULL;
@@ -82,8 +84,10 @@ Catalog::Catalog(const PathString &mountpoint,
 
 
 Catalog::~Catalog() {
+#if 0
   pthread_mutex_destroy(lock_);
   free(lock_);
+#endif
   FinalizePreparedStatements();
   delete database_;
 }
@@ -288,7 +292,8 @@ bool Catalog::LookupEntry(const shash::Md5 &md5path, const bool expand_symlink,
 {
   assert(IsInitialized());
 
-  pthread_mutex_lock(lock_);
+
+  MutexLockGuard guard(lock_);
   sql_lookup_md5path_->BindPathHash(md5path);
   bool found = sql_lookup_md5path_->FetchRow();
   if (found && (dirent != NULL)) {
@@ -296,7 +301,6 @@ bool Catalog::LookupEntry(const shash::Md5 &md5path, const bool expand_symlink,
     FixTransitionPoint(md5path, dirent);
   }
   sql_lookup_md5path_->Reset();
-  pthread_mutex_unlock(lock_);
 
   return found;
 }
@@ -332,14 +336,13 @@ bool Catalog::LookupXattrsMd5Path(
 {
   assert(IsInitialized());
 
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   sql_lookup_xattrs_->BindPathHash(md5path);
   bool found = sql_lookup_xattrs_->FetchRow();
   if (found && (xattrs != NULL)) {
     *xattrs = sql_lookup_xattrs_->GetXattrs();
   }
   sql_lookup_xattrs_->Reset();
-  pthread_mutex_unlock(lock_);
 
   return found;
 }
@@ -359,7 +362,7 @@ bool Catalog::ListingMd5PathStat(const shash::Md5 &md5path,
   DirectoryEntry dirent;
   StatEntry entry;
 
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   sql_listing_->BindPathHash(md5path);
   while (sql_listing_->FetchRow()) {
     dirent = sql_listing_->GetDirent(this);
@@ -371,7 +374,6 @@ bool Catalog::ListingMd5PathStat(const shash::Md5 &md5path,
     listing->PushBack(entry);
   }
   sql_listing_->Reset();
-  pthread_mutex_unlock(lock_);
 
   return true;
 }
@@ -391,7 +393,7 @@ bool Catalog::ListingMd5Path(const shash::Md5 &md5path,
 {
   assert(IsInitialized());
 
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   sql_listing_->BindPathHash(md5path);
   while (sql_listing_->FetchRow()) {
     DirectoryEntry dirent = sql_listing_->GetDirent(this, expand_symlink);
@@ -399,7 +401,6 @@ bool Catalog::ListingMd5Path(const shash::Md5 &md5path,
     listing->push_back(dirent);
   }
   sql_listing_->Reset();
-  pthread_mutex_unlock(lock_);
 
   return true;
 }
@@ -432,13 +433,12 @@ bool Catalog::ListMd5PathChunks(const shash::Md5  &md5path,
 {
   assert(IsInitialized() && chunks->IsEmpty());
 
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   sql_chunks_listing_->BindPathHash(md5path);
   while (sql_chunks_listing_->FetchRow()) {
     chunks->PushBack(sql_chunks_listing_->GetFileChunk(interpret_hashes_as));
   }
   sql_chunks_listing_->Reset();
-  pthread_mutex_unlock(lock_);
 
   return true;
 }
@@ -479,17 +479,16 @@ void Catalog::DropDatabaseFileOwnership() {
 
 
 uint64_t Catalog::GetTTL() const {
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   const uint64_t result =
     database().GetPropertyDefault<uint64_t>("TTL", kDefaultTTL);
-  pthread_mutex_unlock(lock_);
   return result;
 }
 
 
 bool Catalog::GetVOMSAuthz(string *authz) const {
   bool result;
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   if (voms_authz_status_ == kVomsPresent) {
     if (authz) {*authz = voms_authz_;}
     result = true;
@@ -505,15 +504,13 @@ bool Catalog::GetVOMSAuthz(string *authz) const {
     }
     result = (voms_authz_status_ == kVomsPresent);
   }
-  pthread_mutex_unlock(lock_);
   return result;
 }
 
 uint64_t Catalog::GetRevision() const {
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   const uint64_t result =
     database().GetPropertyDefault<uint64_t>("revision", 0);
-  pthread_mutex_unlock(lock_);
   return result;
 }
 
@@ -533,20 +530,18 @@ uint64_t Catalog::GetNumChunks() const {
 uint64_t Catalog::GetNumEntries() const {
   const string sql = "SELECT count(*) FROM catalog;";
 
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   SqlCatalog stmt(database(), sql);
   const uint64_t result = (stmt.FetchRow()) ? stmt.RetrieveInt64(0) : 0;
-  pthread_mutex_unlock(lock_);
 
   return result;
 }
 
 
 shash::Any Catalog::GetPreviousRevision() const {
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   const std::string hash_string =
     database().GetPropertyDefault<std::string>("previous_revision", "");
-  pthread_mutex_unlock(lock_);
   return (!hash_string.empty())
     ? shash::MkFromHexPtr(shash::HexPtr(hash_string), shash::kSuffixCatalog)
     : shash::Any();
@@ -555,9 +550,8 @@ shash::Any Catalog::GetPreviousRevision() const {
 
 string Catalog::PrintMemStatistics() const {
   sqlite::MemStatistics stats;
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   database().GetMemStatistics(&stats);
-  pthread_mutex_unlock(lock_);
   return string(mountpoint().GetChars(), mountpoint().GetLength()) + ": " +
     StringifyInt(stats.lookaside_slots_used) + " / " +
       StringifyInt(stats.lookaside_slots_max) + " slots -- " +
@@ -618,7 +612,7 @@ inode_t Catalog::GetMangledInode(const uint64_t row_id,
  * @return  a list of all nested catalog and bind mountpoints.
  */
 const Catalog::NestedCatalogList& Catalog::ListNestedCatalogs() const {
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
 
   if (nested_catalog_cache_dirty_) {
     LogCvmfs(kLogCatalog, kLogDebug, "refreshing nested catalog cache of '%s'",
@@ -634,7 +628,6 @@ const Catalog::NestedCatalogList& Catalog::ListNestedCatalogs() const {
     nested_catalog_cache_dirty_ = false;
   }
 
-  pthread_mutex_unlock(lock_);
   return nested_catalog_cache_;
 }
 
@@ -647,7 +640,7 @@ const Catalog::NestedCatalogList& Catalog::ListNestedCatalogs() const {
 const Catalog::NestedCatalogList Catalog::ListOwnNestedCatalogs() const {
   NestedCatalogList result;
 
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
 
   while (sql_own_list_nested_->FetchRow()) {
     NestedCatalog nested;
@@ -657,8 +650,6 @@ const Catalog::NestedCatalogList Catalog::ListOwnNestedCatalogs() const {
     result.push_back(nested);
   }
   sql_own_list_nested_->Reset();
-
-  pthread_mutex_unlock(lock_);
 
   return result;
 }
@@ -683,7 +674,7 @@ void Catalog::ResetNestedCatalogCacheUnprotected() {
 bool Catalog::FindNested(const PathString &mountpoint,
                          shash::Any *hash, uint64_t *size) const
 {
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   sql_lookup_nested_->BindSearchPath(NormalizePath2(mountpoint));
   bool found = sql_lookup_nested_->FetchRow();
   if (found && (hash != NULL)) {
@@ -691,7 +682,6 @@ bool Catalog::FindNested(const PathString &mountpoint,
     *size = sql_lookup_nested_->GetSize();
   }
   sql_lookup_nested_->Reset();
-  pthread_mutex_unlock(lock_);
 
   return found;
 }
@@ -702,12 +692,11 @@ bool Catalog::FindNested(const PathString &mountpoint,
  * The annotation object is not owned by the catalog.
  */
 void Catalog::SetInodeAnnotation(InodeAnnotation *new_annotation) {
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   // Since annotated inodes could come back to the catalog in order to
   // get stripped, exchanging the annotation is not allowed
   assert((inode_annotation_ == NULL) || (inode_annotation_ == new_annotation));
   inode_annotation_ = new_annotation;
-  pthread_mutex_unlock(lock_);
 }
 
 
@@ -724,10 +713,9 @@ void Catalog::SetOwnerMaps(const OwnerMap *uid_map, const OwnerMap *gid_map) {
 void Catalog::AddChild(Catalog *child) {
   assert(NULL == FindChild(child->mountpoint()));
 
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   children_[child->mountpoint()] = child;
   child->set_parent(this);
-  pthread_mutex_unlock(lock_);
 }
 
 
@@ -738,23 +726,21 @@ void Catalog::AddChild(Catalog *child) {
 void Catalog::RemoveChild(Catalog *child) {
   assert(NULL != FindChild(child->mountpoint()));
 
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   child->set_parent(NULL);
   children_.erase(child->mountpoint());
-  pthread_mutex_unlock(lock_);
 }
 
 
 CatalogList Catalog::GetChildren() const {
   CatalogList result;
 
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   for (NestedCatalogMap::const_iterator i = children_.begin(),
        iEnd = children_.end(); i != iEnd; ++i)
   {
     result.push_back(i->second);
   }
-  pthread_mutex_unlock(lock_);
 
   return result;
 }
@@ -805,11 +791,10 @@ Catalog* Catalog::FindSubtree(const PathString &path) const {
 Catalog* Catalog::FindChild(const PathString &mountpoint) const {
   NestedCatalogMap::const_iterator nested_iter;
 
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   nested_iter = children_.find(mountpoint);
   Catalog* result =
     (nested_iter == children_.end()) ? NULL : nested_iter->second;
-  pthread_mutex_unlock(lock_);
 
   return result;
 }

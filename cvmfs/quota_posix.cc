@@ -1148,7 +1148,7 @@ void *PosixQuotaManager::MainCommandServer(void *data) {
       shash::Md5 hash;
       memcpy(hash.digest, command_buffer[num_commands].digest,
              shash::kDigestSizes[shash::kMd5]);
-
+#if 0
       quota_mgr->LockBackChannels();
       map<shash::Md5, int>::const_iterator iter =
         quota_mgr->back_channels_.find(hash);
@@ -1159,6 +1159,18 @@ void *PosixQuotaManager::MainCommandServer(void *data) {
       }
       quota_mgr->back_channels_[hash] = return_pipe;
       quota_mgr->UnlockBackChannels();
+#else
+      {  MutexLockGuard lock_guard(quota_mgr->Locker());
+	     map<shash::Md5, int>::const_iterator iter =
+	        quota_mgr->back_channels_.find(hash);
+	     if (iter != quota_mgr->back_channels_.end()) {
+	        LogCvmfs(kLogQuota, kLogDebug | kLogSyslogWarn,
+	                 "closing left-over back channel %s", hash.ToString().c_str());
+	        close(iter->second);
+	     }
+	     quota_mgr->back_channels_[hash] = return_pipe;
+      }
+#endif
 
       char success = 'S';
       WritePipe(return_pipe, &success, sizeof(success));
@@ -1172,7 +1184,7 @@ void *PosixQuotaManager::MainCommandServer(void *data) {
       shash::Md5 hash;
       memcpy(hash.digest, command_buffer[num_commands].digest,
              shash::kDigestSizes[shash::kMd5]);
-
+#if 0
       quota_mgr->LockBackChannels();
       map<shash::Md5, int>::iterator iter =
         quota_mgr->back_channels_.find(hash);
@@ -1186,6 +1198,21 @@ void *PosixQuotaManager::MainCommandServer(void *data) {
                  "did not find back channel %s", hash.ToString().c_str());
       }
       quota_mgr->UnlockBackChannels();
+#else
+      {  MutexLockGuard lock_guard(quota_mgr->Locker());
+         map<shash::Md5, int>::iterator iter =
+            quota_mgr->back_channels_.find(hash);
+         if (iter != quota_mgr->back_channels_.end()) {
+            LogCvmfs(kLogQuota, kLogDebug,
+                  "closing back channel %s", hash.ToString().c_str());
+            close(iter->second);
+            quota_mgr->back_channels_.erase(iter);
+         } else {
+            LogCvmfs(kLogQuota, kLogDebug | kLogSyslogWarn,
+                   "did not find back channel %s", hash.ToString().c_str());
+         }
+      }
+#endif
 
       continue;
     }

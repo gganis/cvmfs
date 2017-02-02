@@ -25,7 +25,9 @@ using namespace std;  // NOLINT
 
 
 AuthzSessionManager::AuthzSessionManager()
-  : deadline_sweep_pids_(0)
+  : lock_pid2session_()
+  , deadline_sweep_pids_(0)
+  , lock_session2cred_()
   , deadline_sweep_creds_(0)
   , authz_fetcher_(NULL)
   , no_pid_(NULL)
@@ -34,21 +36,12 @@ AuthzSessionManager::AuthzSessionManager()
   , n_grant_(NULL)
   , n_deny_(NULL)
 {
-  int retval = pthread_mutex_init(&lock_pid2session_, NULL);
-  assert(retval == 0);
-  retval = pthread_mutex_init(&lock_session2cred_, NULL);
-  assert(retval == 0);
-
   session2cred_.Init(16, SessionKey(), HashSessionKey);
   pid2session_.Init(16, PidKey(), HashPidKey);
 }
 
 
 AuthzSessionManager::~AuthzSessionManager() {
-  int retval = pthread_mutex_destroy(&lock_pid2session_);
-  assert(retval == 0);
-  retval = pthread_mutex_destroy(&lock_session2cred_);
-  assert(retval == 0);
 
   SessionKey empty_key;
   for (unsigned i = 0; i < session2cred_.capacity(); ++i) {
@@ -208,10 +201,11 @@ bool AuthzSessionManager::LookupAuthzData(
 {
   assert(authz_data != NULL);
 
-  LockMutex(&lock_session2cred_);
-  MaySweepCreds();
-  bool found = session2cred_.Lookup(session_key, authz_data);
-  UnlockMutex(&lock_session2cred_);
+  bool found = false;
+  { MutexLockGuard guard(lock_session2cred_);
+    MaySweepCreds();
+    found = session2cred_.Lookup(session_key, authz_data);
+  }
   if (found) {
     LogCvmfs(kLogAuthz, kLogDebug,
              "cached authz data for sid %d, membership %s, status %d",
@@ -239,11 +233,11 @@ bool AuthzSessionManager::LookupAuthzData(
            "ttl %u", session_key.sid, pid_key.pid,
            authz_data->membership.c_str(), authz_data->status, ttl);
 
-  LockMutex(&lock_session2cred_);
-  if (!session2cred_.Contains(session_key))
-    perf::Inc(no_session_);
-  session2cred_.Insert(session_key, *authz_data);
-  UnlockMutex(&lock_session2cred_);
+  { MutexLockGuard guard(lock_session2cred_);
+    if (!session2cred_.Contains(session_key))
+      perf::Inc(no_session_);
+    session2cred_.Insert(session_key, *authz_data);
+  }
 
   const bool granted = authz_data->status == kAuthzOk;
   if (granted)
@@ -269,10 +263,11 @@ bool AuthzSessionManager::LookupSessionKey(
   if (!GetPidInfo(pid, pid_key))
     return false;
 
-  LockMutex(&lock_pid2session_);
-  bool found = pid2session_.Lookup(*pid_key, session_key);
-  MaySweepPids();
-  UnlockMutex(&lock_pid2session_);
+  bool found = false;
+  { MutexLockGuard guard(lock_pid2session_);
+    found = pid2session_.Lookup(*pid_key, session_key);
+    MaySweepPids();
+  }
   if (found) {
     LogCvmfs(kLogAuthz, kLogDebug,
              "Session key %d/%" PRIu64 " in cache; sid=%d, bday=%" PRIu64,
@@ -288,12 +283,12 @@ bool AuthzSessionManager::LookupSessionKey(
 
   session_key->sid = sid_key.pid;
   session_key->sid_bday = sid_key.pid_bday;
-  LockMutex(&lock_pid2session_);
-  pid_key->deadline = platform_monotonic_time() + kPidLifetime;
-  if (!pid2session_.Contains(*pid_key))
-    perf::Inc(no_pid_);
-  pid2session_.Insert(*pid_key, *session_key);
-  UnlockMutex(&lock_pid2session_);
+  { MutexLockGuard guard(lock_pid2session_);
+    pid_key->deadline = platform_monotonic_time() + kPidLifetime;
+    if (!pid2session_.Contains(*pid_key))
+      perf::Inc(no_pid_);
+    pid2session_.Insert(*pid_key, *session_key);
+  }
 
   LogCvmfs(kLogAuthz, kLogDebug, "Lookup key %d/%" PRIu64 "; sid=%d, bday=%llu",
            pid_key->pid, pid_key->pid_bday,

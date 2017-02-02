@@ -189,17 +189,22 @@ class WritableCatalogManager : public SimpleCatalogManager {
                              const CatalogUploadContext   clg_upload_context);
 
  private:
+#if 0
   inline void SyncLock() { pthread_mutex_lock(sync_lock_); }
   inline void SyncUnlock() { pthread_mutex_unlock(sync_lock_); }
+#else
+  inline void SyncLock() { sync_lock_.Lock(); }
+  inline void SyncUnlock() { sync_lock_.Unlock(); }
+#endif
 
   // defined in catalog_mgr_rw.cc
   static const std::string kCatalogFilename;
 
   // private lock of WritableCatalogManager
-  pthread_mutex_t *sync_lock_;
+  Mutex sync_lock_;
   upload::Spooler *spooler_;
 
-  pthread_mutex_t                         *catalog_processing_lock_;
+  Mutex                                   *catalog_processing_lock_;
   std::map<std::string, WritableCatalog*>  catalog_processing_map_;
 
   uint64_t catalog_entry_warn_threshold_;

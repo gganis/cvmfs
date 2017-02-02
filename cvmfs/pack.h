@@ -6,7 +6,7 @@
 #define CVMFS_PACK_H_
 
 #include <inttypes.h>
-#include <pthread.h>
+// #include <pthread.h>
 
 #include <cstdio>
 #include <set>
@@ -105,12 +105,10 @@ class ObjectPack : SingleCopy {
     std::string name;
   };
 
-  void InitLock();
-
   /**
    * Protects open_buckets_ and buckets_ collections.
    */
-  pthread_mutex_t *lock_;
+  Mutex lock_;
 
   /**
    * Maximum size of this object pack.

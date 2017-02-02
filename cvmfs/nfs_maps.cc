@@ -20,7 +20,6 @@
 #include "nfs_maps.h"
 
 #include <inttypes.h>
-#include <pthread.h>
 #include <stdint.h>
 
 #include <cassert>
@@ -35,6 +34,7 @@
 #include "nfs_shared_maps.h"
 #include "util/posix.h"
 #include "util/string.h"
+#include "util_concurrency.h"
 
 using namespace std;  // NOLINT
 
@@ -50,7 +50,7 @@ leveldb::ReadOptions leveldb_read_options_;
 leveldb::WriteOptions leveldb_write_options_;
 uint64_t root_inode_;
 uint64_t seq_;
-pthread_mutex_t lock_ = PTHREAD_MUTEX_INITIALIZER;
+Mutex lock_;
 bool spawned_ = false;  // Set to true after fork()
 // If true, use sqlite db that can be put on a shared NFS volume.
 // See nfs_shared_maps
@@ -205,11 +205,10 @@ uint64_t GetInode(const PathString &path) {
   if (inode != 0)
     return inode;
 
-  pthread_mutex_lock(&lock_);
+  MutexLockGuard guard(lock_);
   // Search again to avoid race
   inode = FindInode(md5_path);
   if (inode != 0) {
-    pthread_mutex_unlock(&lock_);
     return inode;
   }
 
@@ -217,7 +216,6 @@ uint64_t GetInode(const PathString &path) {
   inode = seq_++;
   PutPath2Inode(md5_path, inode);
   PutInode2Path(inode, path);
-  pthread_mutex_unlock(&lock_);
 
   return inode;
 }

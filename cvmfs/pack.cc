@@ -135,11 +135,33 @@ void ObjectPack::DiscardBucket(const BucketHandle handle) {
   delete handle;
 }
 
-void ObjectPack::InitLock() {
-  lock_ = reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(lock_, NULL);
-  assert(retval == 0);
+
+ObjectPack::ObjectPack() : lock_(), limit_(kDefaultLimit), size_(0) { }
+
+
+ObjectPack::ObjectPack(const uint64_t limit) : lock_(), limit_(limit), size_(0) { }
+
+
+ObjectPack::~ObjectPack() {
+  for (std::set<BucketHandle>::const_iterator i = open_buckets_.begin(),
+       iEnd = open_buckets_.end(); i != iEnd; ++i)
+  {
+    delete *i;
+  }
+
+  for (unsigned i = 0; i < buckets_.size(); ++i)
+    delete buckets_[i];
 }
+
+
+ObjectPack::BucketHandle ObjectPack::OpenBucket() {
+  BucketHandle handle = new Bucket();
+
+  MutexLockGuard mutex_guard(lock_);
+  open_buckets_.insert(handle);
+  return handle;
+}
+
 
 /**
  * If a commit failed, an open Bucket can be transferred to another ObjectPack

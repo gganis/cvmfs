@@ -24,7 +24,9 @@
 #include "util/pointer.h"
 #include "util/posix.h"
 #include "util/string.h"
+#if 0
 #include "util_concurrency.h"
+#endif
 
 using namespace std;  // NOLINT
 
@@ -47,7 +49,9 @@ AuthzExternalFetcher::AuthzExternalFetcher(
   , fail_state_(false)
   , options_manager_(options_manager)
 {
+#if 0
   InitLock();
+#endif
 }
 
 AuthzExternalFetcher::AuthzExternalFetcher(
@@ -61,13 +65,19 @@ AuthzExternalFetcher::AuthzExternalFetcher(
   , fail_state_(false)
   , options_manager_(NULL)
 {
+#if 0
   InitLock();
+#endif
 }
 
 
 AuthzExternalFetcher::~AuthzExternalFetcher() {
+#if 0
   int retval = pthread_mutex_destroy(&lock_);
   assert(retval == 0);
+#else
+  int retval = 0;
+#endif
 
   // Allow helper to gracefully terminate
   if ((fd_send_ >= 0) && !fail_state_) {
@@ -276,12 +286,12 @@ bool AuthzExternalFetcher::Handshake() {
   return true;
 }
 
-
+#if 0
 void AuthzExternalFetcher::InitLock() {
   int retval = pthread_mutex_init(&lock_, NULL);
   assert(retval == 0);
 }
-
+#endif
 
 bool AuthzExternalFetcher::Send(const string &msg) {
   // Line format: 4 byte protocol version, 4 byte length, message

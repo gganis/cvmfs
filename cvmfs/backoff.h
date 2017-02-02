@@ -5,10 +5,10 @@
 #ifndef CVMFS_BACKOFF_H_
 #define CVMFS_BACKOFF_H_
 
-#include <pthread.h>
+// #include <pthread.h>
 
 #include "prng.h"
-#include "util/single_copy.h"
+#include "util_concurrency.h"
 
 /**
  * When Throttle() is called in quick succession, the exponential backoff will
@@ -47,7 +47,7 @@ class BackoffThrottle : public SingleCopy {
   unsigned reset_after_ms_;
   time_t last_throttle_;
   Prng prng_;
-  pthread_mutex_t *lock_;
+  Mutex lock_;
 };
 
 #endif  // CVMFS_BACKOFF_H_

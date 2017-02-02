@@ -20,7 +20,7 @@ const uint32_t QuotaManager::kProtocolRevision = 2;
 
 void QuotaManager::BroadcastBackchannels(const string &message) {
   assert(message.length() > 0);
-  MutexLockGuard lock_guard(*lock_back_channels_);
+  MutexLockGuard lock_guard(lock_back_channels_);
 
   for (map<shash::Md5, int>::iterator i = back_channels_.begin(),
        iend = back_channels_.end(); i != iend; )
@@ -51,11 +51,13 @@ void QuotaManager::BroadcastBackchannels(const string &message) {
 }
 
 
-QuotaManager::QuotaManager() : protocol_revision_(0) {
+QuotaManager::QuotaManager() : lock_back_channels_(), protocol_revision_(0)  {
+#if 0
   lock_back_channels_ =
     reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
   int retval = pthread_mutex_init(lock_back_channels_, NULL);
   assert(retval == 0);
+#endif
 }
 
 
@@ -65,6 +67,8 @@ QuotaManager::~QuotaManager() {
   {
     close(i->second);
   }
+#if 0
   pthread_mutex_destroy(lock_back_channels_);
   free(lock_back_channels_);
+#endif
 }

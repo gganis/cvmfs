@@ -11,11 +11,12 @@
  * If DEBUGMSG is undefined, pure debug messages are compiled into no-ops.
  */
 
+
 #include "logging_internal.h"  // NOLINT(build/include)
 
 #include <errno.h>
 #include <fcntl.h>
-#include <pthread.h>
+// #include <pthread.h>
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
@@ -31,6 +32,9 @@
 
 using namespace std;  // NOLINT
 
+#define CVMFS_UTIL_CONCURRENCY_IMPL_H_
+#include "util_concurrency.h"
+
 #ifdef CVMFS_NAMESPACE_GUARD
 namespace CVMFS_NAMESPACE_GUARD {
 #endif
@@ -39,10 +43,10 @@ namespace {
 
 const unsigned kMicroSyslogMax = 500 * 1024;  // rotate after 500kB
 
-pthread_mutex_t lock_stdout = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t lock_stderr = PTHREAD_MUTEX_INITIALIZER;
+Mutex lock_stdout;
+Mutex lock_stderr;
 #ifdef DEBUGMSG
-pthread_mutex_t lock_debug = PTHREAD_MUTEX_INITIALIZER;
+Mutex lock_debug;
 FILE *file_debug = NULL;
 string *path_debug = NULL;
 #endif
@@ -64,7 +68,7 @@ string *usyslog_dest = NULL;
 int usyslog_fd = -1;
 int usyslog_fd1 = -1;
 unsigned usyslog_size = 0;
-pthread_mutex_t lock_usyslock = PTHREAD_MUTEX_INITIALIZER;
+Mutex lock_usyslock;
 
 LogLevels min_log_level = kLogNormal;
 static void (*alt_log_func)(const LogSource source, const int mask,
@@ -188,7 +192,7 @@ void SetLogVerbosity(const LogLevels min_level) { min_log_level = min_level; }
  * file.  Requires for µCernVM
  */
 void SetLogMicroSyslog(const std::string &filename) {
-  pthread_mutex_lock(&lock_usyslock);
+  MutexLockGuard guard(lock_usyslock);
   if (usyslog_fd >= 0) {
     close(usyslog_fd);
     close(usyslog_fd1);
@@ -199,7 +203,6 @@ void SetLogMicroSyslog(const std::string &filename) {
   if (filename == "") {
     delete usyslog_dest;
     usyslog_dest = NULL;
-    pthread_mutex_unlock(&lock_usyslock);
     return;
   }
 
@@ -220,25 +223,20 @@ void SetLogMicroSyslog(const std::string &filename) {
   assert(retval == 0);
   usyslog_size = info.st_size;
   usyslog_dest = new string(filename);
-  pthread_mutex_unlock(&lock_usyslock);
 }
 
 std::string GetLogMicroSyslog() {
-  pthread_mutex_lock(&lock_usyslock);
+  MutexLockGuard guard(lock_usyslock);
   string result;
   if (usyslog_dest) result = *usyslog_dest;
-  pthread_mutex_unlock(&lock_usyslock);
   return result;
 }
 
 static void LogMicroSyslog(const std::string &message) {
   if (message.size() == 0) return;
 
-  pthread_mutex_lock(&lock_usyslock);
-  if (usyslog_fd < 0) {
-    pthread_mutex_unlock(&lock_usyslock);
-    return;
-  }
+  MutexLockGuard guard(lock_usyslock);
+  if (usyslog_fd < 0) return;
 
   int written = write(usyslog_fd, message.data(), message.size());
   if ((written < 0) || (static_cast<unsigned>(written) != message.size())) {
@@ -277,7 +275,6 @@ static void LogMicroSyslog(const std::string &message) {
     assert(retval == 0);
     usyslog_size = 0;
   }
-  pthread_mutex_unlock(&lock_usyslock);
 }
 
 /**
@@ -360,7 +357,7 @@ void LogCvmfs(const LogSource source, const int mask, const char *format, ...) {
 
 #ifdef DEBUGMSG
   if (mask & kLogDebug) {
-    pthread_mutex_lock(&lock_debug);
+    MutexLockGuard guard(lock_debug);
 
     // Set the file pointer for debuging to stderr, if necessary
     if (file_debug == NULL) file_debug = stderr;
@@ -371,34 +368,31 @@ void LogCvmfs(const LogSource source, const int mask, const char *format, ...) {
     struct tm now;
     localtime_r(&rawtime, &now);
 
-    if (file_debug == stderr) pthread_mutex_lock(&lock_stderr);
+    if (file_debug == stderr) lock_stderr.Lock();
     fprintf(file_debug, "(%s) %s    [%02d-%02d-%04d %02d:%02d:%02d %s]\n",
             module_names[source], msg, (now.tm_mon) + 1, now.tm_mday,
             (now.tm_year) + 1900, now.tm_hour, now.tm_min, now.tm_sec,
             now.tm_zone);
     fflush(file_debug);
-    if (file_debug == stderr) pthread_mutex_unlock(&lock_stderr);
+    if (file_debug == stderr) lock_stderr.Unlock();
 
-    pthread_mutex_unlock(&lock_debug);
   }
 #endif
 
   if (mask & kLogStdout) {
-    pthread_mutex_lock(&lock_stdout);
+    MutexLockGuard g(lock_stdout);
     if (mask & kLogShowSource) printf("(%s) ", module_names[source]);
     printf("%s", msg);
     if (!(mask & kLogNoLinebreak)) printf("\n");
     fflush(stdout);
-    pthread_mutex_unlock(&lock_stdout);
   }
 
   if (mask & kLogStderr) {
-    pthread_mutex_lock(&lock_stderr);
+    MutexLockGuard g(lock_stderr);
     if (mask & kLogShowSource) fprintf(stderr, "(%s) ", module_names[source]);
     fprintf(stderr, "%s", msg);
     if (!(mask & kLogNoLinebreak)) fprintf(stderr, "\n");
     fflush(stderr);
-    pthread_mutex_unlock(&lock_stderr);
   }
 
   if (mask & (kLogSyslog | kLogSyslogWarn | kLogSyslogErr)) {

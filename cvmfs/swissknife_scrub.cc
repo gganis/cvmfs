@@ -23,11 +23,7 @@ CommandScrub::CommandScrub()
   : machine_readable_output_(false)
   , reader_(NULL)
   , alerts_(0)
-{
-  // initialize alert printer mutex
-  const bool mutex_init = (pthread_mutex_init(&alerts_mutex_, NULL) == 0);
-  assert(mutex_init);
-}
+  , alerts_mutex_() { }
 
 
 CommandScrub::~CommandScrub() {
@@ -35,8 +31,6 @@ CommandScrub::~CommandScrub() {
     delete reader_;
     reader_ = NULL;
   }
-
-  pthread_mutex_destroy(&alerts_mutex_);
 }
 
 

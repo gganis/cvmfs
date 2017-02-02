@@ -362,10 +362,12 @@ ExternalCacheManager::ExternalCacheManager(
 {
   int retval = pthread_rwlock_init(&rwlock_fd_table_, NULL);
   assert(retval == 0);
+#if 0
   retval = pthread_mutex_init(&lock_send_fd_, NULL);
   assert(retval == 0);
   retval = pthread_mutex_init(&lock_inflight_rpcs_, NULL);
   assert(retval == 0);
+#endif
   atomic_init64(&next_request_id_);
 }
 
@@ -384,8 +386,10 @@ ExternalCacheManager::~ExternalCacheManager() {
     pthread_join(thread_read_, NULL);
   close(transport_.fd_connection());
   pthread_rwlock_destroy(&rwlock_fd_table_);
+#if 0
   pthread_mutex_destroy(&lock_send_fd_);
   pthread_mutex_destroy(&lock_inflight_rpcs_);
+#endif
 }
 
 
@@ -970,10 +974,16 @@ void ExternalQuotaManager::RegisterBackChannel(
 {
   shash::Md5 hash_id = shash::Md5(shash::AsciiPtr(channel_id));
   MakePipe(back_channel);
+#if 0
   LockBackChannels();
+#else
+  MutexLockGuard lock_guard(Locker());
+#endif
   assert(back_channels_.find(hash_id) == back_channels_.end());
   back_channels_[hash_id] = back_channel[1];
+#if 0
   UnlockBackChannels();
+#endif
 }
 
 
@@ -982,8 +992,15 @@ void ExternalQuotaManager::UnregisterBackChannel(
   const string &channel_id)
 {
   shash::Md5 hash_id = shash::Md5(shash::AsciiPtr(channel_id));
+#if 0
   LockBackChannels();
   back_channels_.erase(hash_id);
   UnlockBackChannels();
   ClosePipe(back_channel);
+#else
+  {  MutexLockGuard lock_guard(Locker());
+     back_channels_.erase(hash_id);
+  }
+  ClosePipe(back_channel);
+#endif
 }

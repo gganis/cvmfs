@@ -853,149 +853,149 @@ void DownloadManager::InitializeRequest(JobInfo *info, CURL *handle) {
  */
 void DownloadManager::SetUrlOptions(JobInfo *info) {
   CURL *curl_handle = info->curl_handle;
-  string url_prefix;
+  string url_prefix, url;
 
-  pthread_mutex_lock(lock_options_);
-  // Check if proxy group needs to be reset from backup to primary
-  if (opt_timestamp_backup_proxies_ > 0) {
-    const time_t now = time(NULL);
-    if (static_cast<int64_t>(now) >
-        static_cast<int64_t>(opt_timestamp_backup_proxies_ +
-                             opt_proxy_groups_reset_after_))
-    {
-      string old_proxy;
-      if (opt_proxy_groups_)
-        old_proxy = (*opt_proxy_groups_)[opt_proxy_groups_current_][0].url;
+  { MutexLockGuard guard(lock_options_);
+	// Check if proxy group needs to be reset from backup to primary
+	if (opt_timestamp_backup_proxies_ > 0) {
+	  const time_t now = time(NULL);
+	  if (static_cast<int64_t>(now) >
+	      static_cast<int64_t>(opt_timestamp_backup_proxies_ +
+	                             opt_proxy_groups_reset_after_))
+	  {
+	    string old_proxy;
+	    if (opt_proxy_groups_)
+	      old_proxy = (*opt_proxy_groups_)[opt_proxy_groups_current_][0].url;
 
-      opt_proxy_groups_current_ = 0;
-      RebalanceProxiesUnlocked();
-      opt_timestamp_backup_proxies_ = 0;
+	    opt_proxy_groups_current_ = 0;
+	    RebalanceProxiesUnlocked();
+	    opt_timestamp_backup_proxies_ = 0;
 
-      if (opt_proxy_groups_) {
-        LogCvmfs(kLogDownload, kLogDebug | kLogSyslogWarn,
-                 "switching proxy from %s to %s (reset proxy group)",
-                 old_proxy.c_str(), (*opt_proxy_groups_)[0][0].url.c_str());
-      }
-    }
+	    if (opt_proxy_groups_) {
+	      LogCvmfs(kLogDownload, kLogDebug | kLogSyslogWarn,
+	               "switching proxy from %s to %s (reset proxy group)",
+	                old_proxy.c_str(), (*opt_proxy_groups_)[0][0].url.c_str());
+	    }
+	  }
+	}
+	// Check if load-balanced proxies within the group need to be reset
+	if (opt_timestamp_failover_proxies_ > 0) {
+	  const time_t now = time(NULL);
+	  if (static_cast<int64_t>(now) >
+	      static_cast<int64_t>(opt_timestamp_failover_proxies_ +
+	                             opt_proxy_groups_reset_after_))
+	  {
+	    string old_proxy;
+	    if (opt_proxy_groups_)
+	        old_proxy = (*opt_proxy_groups_)[opt_proxy_groups_current_][0].url;
+	    RebalanceProxiesUnlocked();
+	    if (opt_proxy_groups_ && (old_proxy != (*opt_proxy_groups_)[0][0].url)) {
+	      LogCvmfs(kLogDownload, kLogDebug | kLogSyslogWarn,
+	               "switching proxy from %s to %s (reset load-balanced proxies)",
+	               old_proxy.c_str(), (*opt_proxy_groups_)[0][0].url.c_str());
+	    }
+	  }
+	}
+	// Check if host needs to be reset
+	if (opt_timestamp_backup_host_ > 0) {
+	  const time_t now = time(NULL);
+	  if (static_cast<int64_t>(now) >
+	      static_cast<int64_t>(opt_timestamp_backup_host_ +
+	                             opt_host_reset_after_))
+	  {
+	    LogCvmfs(kLogDownload, kLogDebug | kLogSyslogWarn,
+	             "switching host from %s to %s (reset host)",
+	             (*opt_host_chain_)[opt_host_chain_current_].c_str(),
+	             (*opt_host_chain_)[0].c_str());
+	    opt_host_chain_current_ = 0;
+	    opt_timestamp_backup_host_ = 0;
+	  }
+	}
+
+	if (!opt_proxy_groups_ ||
+       ((*opt_proxy_groups_)[opt_proxy_groups_current_][0].url == "DIRECT"))
+	{
+	  info->proxy = "DIRECT";
+      curl_easy_setopt(info->curl_handle, CURLOPT_PROXY, "");
+	} else {
+	  ProxyInfo proxy = (*opt_proxy_groups_)[opt_proxy_groups_current_][0];
+      ValidateProxyIpsUnlocked(proxy.url, proxy.host);
+	  ProxyInfo *proxy_ptr =
+	    &((*opt_proxy_groups_)[opt_proxy_groups_current_][0]);
+	  info->proxy = proxy_ptr->url;
+	  if (proxy_ptr->host.status() == dns::kFailOk) {
+	    curl_easy_setopt(info->curl_handle, CURLOPT_PROXY, info->proxy.c_str());
+	  } else {
+	    // We know it can't work, don't even try to download
+	    curl_easy_setopt(info->curl_handle, CURLOPT_PROXY, "0.0.0.0");
+	  }
+	}
+	curl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_LIMIT, opt_low_speed_limit_);
+	if (info->proxy != "DIRECT") {
+	  curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, opt_timeout_proxy_);
+	  curl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_TIME, opt_timeout_proxy_);
+	} else {
+	  curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, opt_timeout_direct_);
+	  curl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_TIME, opt_timeout_direct_);
+	}
+	if (opt_dns_server_)
+	  curl_easy_setopt(curl_handle, CURLOPT_DNS_SERVERS, opt_dns_server_);
+
+	if (info->probe_hosts && opt_host_chain_)
+	  url_prefix = (*opt_host_chain_)[opt_host_chain_current_];
+
+	url = url_prefix + *(info->url);
+
+	curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 1L);
+	if (url.substr(0, 5) == "https") {
+	  const char *cadir = getenv("X509_CERT_DIR");
+	  if (!cadir || !*cadir) {cadir = "/etc/grid-security/certificates";}
+	  curl_easy_setopt(curl_handle, CURLOPT_CAPATH, cadir);
+	  if (info->pid != -1) {
+	    if (credentials_attachment_ == NULL) {
+	      LogCvmfs(kLogDownload, kLogDebug,
+	               "uses secure downloads but no credentials attachment set");
+	    } else {
+	      bool retval = credentials_attachment_->ConfigureCurlHandle(
+	                    curl_handle, info->pid, &info->cred_data);
+	      if (!retval) {
+	        LogCvmfs(kLogDownload, kLogDebug, "failed attaching credentials");
+	      }
+	    }
+	  }
+	  // The download manager disables signal handling in the curl library;
+	  // as OpenSSL's implementation of TLS will generate a sigpipe in some
+	  // error paths, we must explicitly disable SIGPIPE here.
+	  // TODO(jblomer): it should be enough to do this once
+	  signal(SIGPIPE, SIG_IGN);
+	}
+
+	if (url.find("@proxy@") != string::npos) {
+	  string replacement;
+	  if (proxy_template_forced_ != "") {
+	    replacement = proxy_template_forced_;
+	  } else if (info->proxy == "DIRECT") {
+	    replacement = proxy_template_direct_;
+	  } else {
+	    if (opt_proxy_groups_current_ >= opt_proxy_groups_fallback_) {
+	      // It doesn't make sense to use the fallback proxies in Geo-API requests
+	      // since the fallback proxies are supposed to get sorted, too.
+	      LogCvmfs(kLogDownload, kLogDebug,
+	               "using direct connection instead of fallback proxy");
+	      info->proxy = "DIRECT";
+	      curl_easy_setopt(info->curl_handle, CURLOPT_PROXY, "");
+	      replacement = proxy_template_direct_;
+        } else {
+	      replacement =
+	          (*opt_proxy_groups_)[opt_proxy_groups_current_][0].host.name();
+	    }
+	  }
+	  replacement = (replacement == "") ? proxy_template_direct_ : replacement;
+	  LogCvmfs(kLogDownload, kLogDebug, "replacing @proxy@ by %s",
+	           replacement.c_str());
+	  url = ReplaceAll(url, "@proxy@", replacement);
+	}
   }
-  // Check if load-balanced proxies within the group need to be reset
-  if (opt_timestamp_failover_proxies_ > 0) {
-    const time_t now = time(NULL);
-    if (static_cast<int64_t>(now) >
-        static_cast<int64_t>(opt_timestamp_failover_proxies_ +
-                             opt_proxy_groups_reset_after_))
-    {
-      string old_proxy;
-      if (opt_proxy_groups_)
-        old_proxy = (*opt_proxy_groups_)[opt_proxy_groups_current_][0].url;
-      RebalanceProxiesUnlocked();
-      if (opt_proxy_groups_ && (old_proxy != (*opt_proxy_groups_)[0][0].url)) {
-        LogCvmfs(kLogDownload, kLogDebug | kLogSyslogWarn,
-                 "switching proxy from %s to %s (reset load-balanced proxies)",
-                 old_proxy.c_str(), (*opt_proxy_groups_)[0][0].url.c_str());
-      }
-    }
-  }
-  // Check if host needs to be reset
-  if (opt_timestamp_backup_host_ > 0) {
-    const time_t now = time(NULL);
-    if (static_cast<int64_t>(now) >
-        static_cast<int64_t>(opt_timestamp_backup_host_ +
-                             opt_host_reset_after_))
-    {
-      LogCvmfs(kLogDownload, kLogDebug | kLogSyslogWarn,
-               "switching host from %s to %s (reset host)",
-               (*opt_host_chain_)[opt_host_chain_current_].c_str(),
-               (*opt_host_chain_)[0].c_str());
-      opt_host_chain_current_ = 0;
-      opt_timestamp_backup_host_ = 0;
-    }
-  }
-
-  if (!opt_proxy_groups_ ||
-      ((*opt_proxy_groups_)[opt_proxy_groups_current_][0].url == "DIRECT"))
-  {
-    info->proxy = "DIRECT";
-    curl_easy_setopt(info->curl_handle, CURLOPT_PROXY, "");
-  } else {
-    ProxyInfo proxy = (*opt_proxy_groups_)[opt_proxy_groups_current_][0];
-    ValidateProxyIpsUnlocked(proxy.url, proxy.host);
-    ProxyInfo *proxy_ptr =
-      &((*opt_proxy_groups_)[opt_proxy_groups_current_][0]);
-    info->proxy = proxy_ptr->url;
-    if (proxy_ptr->host.status() == dns::kFailOk) {
-      curl_easy_setopt(info->curl_handle, CURLOPT_PROXY, info->proxy.c_str());
-    } else {
-      // We know it can't work, don't even try to download
-      curl_easy_setopt(info->curl_handle, CURLOPT_PROXY, "0.0.0.0");
-    }
-  }
-  curl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_LIMIT, opt_low_speed_limit_);
-  if (info->proxy != "DIRECT") {
-    curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, opt_timeout_proxy_);
-    curl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_TIME, opt_timeout_proxy_);
-  } else {
-    curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, opt_timeout_direct_);
-    curl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_TIME, opt_timeout_direct_);
-  }
-  if (opt_dns_server_)
-    curl_easy_setopt(curl_handle, CURLOPT_DNS_SERVERS, opt_dns_server_);
-
-  if (info->probe_hosts && opt_host_chain_)
-    url_prefix = (*opt_host_chain_)[opt_host_chain_current_];
-
-  string url = url_prefix + *(info->url);
-
-  curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 1L);
-  if (url.substr(0, 5) == "https") {
-    const char *cadir = getenv("X509_CERT_DIR");
-    if (!cadir || !*cadir) {cadir = "/etc/grid-security/certificates";}
-    curl_easy_setopt(curl_handle, CURLOPT_CAPATH, cadir);
-    if (info->pid != -1) {
-      if (credentials_attachment_ == NULL) {
-        LogCvmfs(kLogDownload, kLogDebug,
-                 "uses secure downloads but no credentials attachment set");
-      } else {
-        bool retval = credentials_attachment_->ConfigureCurlHandle(
-          curl_handle, info->pid, &info->cred_data);
-        if (!retval) {
-          LogCvmfs(kLogDownload, kLogDebug, "failed attaching credentials");
-        }
-      }
-    }
-    // The download manager disables signal handling in the curl library;
-    // as OpenSSL's implementation of TLS will generate a sigpipe in some
-    // error paths, we must explicitly disable SIGPIPE here.
-    // TODO(jblomer): it should be enough to do this once
-    signal(SIGPIPE, SIG_IGN);
-  }
-
-  if (url.find("@proxy@") != string::npos) {
-    string replacement;
-    if (proxy_template_forced_ != "") {
-      replacement = proxy_template_forced_;
-    } else if (info->proxy == "DIRECT") {
-      replacement = proxy_template_direct_;
-    } else {
-      if (opt_proxy_groups_current_ >= opt_proxy_groups_fallback_) {
-        // It doesn't make sense to use the fallback proxies in Geo-API requests
-        // since the fallback proxies are supposed to get sorted, too.
-        LogCvmfs(kLogDownload, kLogDebug,
-                 "using direct connection instead of fallback proxy");
-        info->proxy = "DIRECT";
-        curl_easy_setopt(info->curl_handle, CURLOPT_PROXY, "");
-        replacement = proxy_template_direct_;
-      } else {
-        replacement =
-          (*opt_proxy_groups_)[opt_proxy_groups_current_][0].host.name();
-      }
-    }
-    replacement = (replacement == "") ? proxy_template_direct_ : replacement;
-    LogCvmfs(kLogDownload, kLogDebug, "replacing @proxy@ by %s",
-             replacement.c_str());
-    url = ReplaceAll(url, "@proxy@", replacement);
-  }
-  pthread_mutex_unlock(lock_options_);
 
   if ((info->destination == kDestinationMem) &&
       (info->destination_mem.size == 0) &&
@@ -1098,9 +1098,8 @@ void DownloadManager::UpdateStatistics(CURL *handle) {
  * Retry if possible if not on no-cache and if not already done too often.
  */
 bool DownloadManager::CanRetry(const JobInfo *info) {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   unsigned max_retries = opt_max_retries_;
-  pthread_mutex_unlock(lock_options_);
 
   return !info->nocache && (info->num_retries < max_retries) &&
     ((info->error_code == kFailProxyConnection) ||
@@ -1116,10 +1115,9 @@ bool DownloadManager::CanRetry(const JobInfo *info) {
  * \return true if backoff has been performed, false otherwise
  */
 void DownloadManager::Backoff(JobInfo *info) {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   unsigned backoff_init_ms = opt_backoff_init_ms_;
   unsigned backoff_max_ms = opt_backoff_max_ms_;
-  pthread_mutex_unlock(lock_options_);
 
   info->num_retries++;
   perf::Inc(counters_->n_retries);
@@ -1274,7 +1272,7 @@ bool DownloadManager::VerifyAndFinalize(const int curl_error, JobInfo *info) {
   bool try_again = false;
   bool same_url_retry = CanRetry(info);
   if (info->error_code != kFailOk) {
-    pthread_mutex_lock(lock_options_);
+    MutexLockGuard guard(lock_options_);
     if (info->error_code == kFailBadData) {
       if (!info->nocache) {
         try_again = true;
@@ -1340,7 +1338,6 @@ bool DownloadManager::VerifyAndFinalize(const int curl_error, JobInfo *info) {
         }
       }  // Make a proxy failure a host failure
     }  // Proxy failure assumed
-    pthread_mutex_unlock(lock_options_);
   }
 
   if (try_again) {
@@ -1446,7 +1443,7 @@ bool DownloadManager::VerifyAndFinalize(const int curl_error, JobInfo *info) {
 }
 
 
-DownloadManager::DownloadManager() {
+DownloadManager::DownloadManager() : lock_options_(), lock_synchronous_mode_(){
   pool_handles_idle_ = NULL;
   pool_handles_inuse_ = NULL;
   pool_max_handles_ = 0;
@@ -1461,15 +1458,6 @@ DownloadManager::DownloadManager() {
   watch_fds_size_ = 0;
   watch_fds_inuse_ = 0;
   watch_fds_max_ = 0;
-
-  lock_options_ =
-  reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(lock_options_, NULL);
-  assert(retval == 0);
-  lock_synchronous_mode_ =
-  reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  retval = pthread_mutex_init(lock_synchronous_mode_, NULL);
-  assert(retval == 0);
 
   opt_dns_server_ = NULL;
   opt_ip_preference_ = dns::kIpPreferSystem;
@@ -1505,12 +1493,7 @@ DownloadManager::DownloadManager() {
 }
 
 
-DownloadManager::~DownloadManager() {
-  pthread_mutex_destroy(lock_options_);
-  pthread_mutex_destroy(lock_synchronous_mode_);
-  free(lock_options_);
-  free(lock_synchronous_mode_);
-}
+DownloadManager::~DownloadManager() { }
 
 void DownloadManager::InitHeaders() {
   // User-Agent
@@ -1709,7 +1692,7 @@ Failures DownloadManager::Fetch(JobInfo *info) {
     ReadPipe(info->wait_at[0], &result, sizeof(result));
     // LogCvmfs(kLogDownload, kLogDebug, "got result %d", result);
   } else {
-    pthread_mutex_lock(lock_synchronous_mode_);
+    MutexLockGuard guard(lock_synchronous_mode_);
     CURL *handle = AcquireCurlHandle();
     InitializeRequest(info, handle);
     SetUrlOptions(info);
@@ -1724,7 +1707,6 @@ Failures DownloadManager::Fetch(JobInfo *info) {
     } while (VerifyAndFinalize(retval, info));
     result = info->error_code;
     ReleaseCurlHandle(info->curl_handle);
-    pthread_mutex_unlock(lock_synchronous_mode_);
   }
 
   if (result != kFailOk) {
@@ -1750,9 +1732,8 @@ Failures DownloadManager::Fetch(JobInfo *info) {
  * manager.
  */
 void DownloadManager::SetCredentialsAttachment(CredentialsAttachment *ca) {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   credentials_attachment_ = ca;
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -1761,7 +1742,7 @@ void DownloadManager::SetCredentialsAttachment(CredentialsAttachment *ca) {
  * default.
  */
 void DownloadManager::SetDnsServer(const string &address) {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   if (opt_dns_server_)
     free(opt_dns_server_);
   if (address != "") {
@@ -1773,7 +1754,6 @@ void DownloadManager::SetDnsServer(const string &address) {
     bool retval = resolver_->SetResolvers(servers);
     assert(retval);
   }
-  pthread_mutex_unlock(lock_options_);
   LogCvmfs(kLogDownload, kLogSyslog, "set nameserver to %s", address.c_str());
 }
 
@@ -1785,26 +1765,20 @@ void DownloadManager::SetDnsParameters(
   const unsigned retries,
   const unsigned timeout_ms)
 {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   if ((resolver_->retries() == retries) &&
-      (resolver_->timeout_ms() == timeout_ms))
-  {
-    pthread_mutex_unlock(lock_options_);
-    return;
-  }
+      (resolver_->timeout_ms() == timeout_ms)) return;
   delete resolver_;
   resolver_ = NULL;
   resolver_ =
     dns::NormalResolver::Create(opt_ipv4_only_, retries, timeout_ms);
   assert(resolver_);
-  pthread_mutex_unlock(lock_options_);
 }
 
 
 void DownloadManager::SetIpPreference(dns::IpPreference preference) {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   opt_ip_preference_ = preference;
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -1816,10 +1790,9 @@ void DownloadManager::SetIpPreference(dns::IpPreference preference) {
 void DownloadManager::SetTimeout(const unsigned seconds_proxy,
                                  const unsigned seconds_direct)
 {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   opt_timeout_proxy_ = seconds_proxy;
   opt_timeout_direct_ = seconds_direct;
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -1829,9 +1802,8 @@ void DownloadManager::SetTimeout(const unsigned seconds_proxy,
  * consider it to be too slow and abort.  Only effective for new connections.
  */
 void DownloadManager::SetLowSpeedLimit(const unsigned low_speed_limit) {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   opt_low_speed_limit_ = low_speed_limit;
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -1841,10 +1813,9 @@ void DownloadManager::SetLowSpeedLimit(const unsigned low_speed_limit) {
 void DownloadManager::GetTimeout(unsigned *seconds_proxy,
                                  unsigned *seconds_direct)
 {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   *seconds_proxy = opt_timeout_proxy_;
   *seconds_direct = opt_timeout_direct_;
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -1858,7 +1829,7 @@ void DownloadManager::SetHostChain(const string &host_list) {
 
 
 void DownloadManager::SetHostChain(const std::vector<std::string> &host_list) {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   opt_timestamp_backup_host_ = 0;
   delete opt_host_chain_;
   delete opt_host_chain_rtt_;
@@ -1867,7 +1838,6 @@ void DownloadManager::SetHostChain(const std::vector<std::string> &host_list) {
   if (host_list.empty()) {
     opt_host_chain_ = NULL;
     opt_host_chain_rtt_ = NULL;
-    pthread_mutex_unlock(lock_options_);
     return;
   }
 
@@ -1876,7 +1846,6 @@ void DownloadManager::SetHostChain(const std::vector<std::string> &host_list) {
     new vector<int>(opt_host_chain_->size(), kProbeUnprobed);
   // LogCvmfs(kLogDownload, kLogSyslog, "using host %s",
   //          (*opt_host_chain_)[0].c_str());
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -1888,13 +1857,12 @@ void DownloadManager::SetHostChain(const std::vector<std::string> &host_list) {
 void DownloadManager::GetHostInfo(vector<string> *host_chain, vector<int> *rtt,
                                   unsigned *current_host)
 {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   if (opt_host_chain_) {
     if (current_host) {*current_host = opt_host_chain_current_;}
     if (host_chain) {*host_chain = *opt_host_chain_;}
     if (rtt) {*rtt = *opt_host_chain_rtt_;}
   }
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -1906,16 +1874,14 @@ void DownloadManager::GetHostInfo(vector<string> *host_chain, vector<int> *rtt,
  * by info, otherwise another transfer has already done the switch.
  */
 void DownloadManager::SwitchProxy(JobInfo *info) {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
 
   if (!opt_proxy_groups_) {
-    pthread_mutex_unlock(lock_options_);
     return;
   }
   if (info &&
       ((*opt_proxy_groups_)[opt_proxy_groups_current_][0].url != info->proxy))
   {
-    pthread_mutex_unlock(lock_options_);
     return;
   }
 
@@ -1980,8 +1946,6 @@ void DownloadManager::SwitchProxy(JobInfo *info) {
            old_proxy.c_str(), (*group)[0].url.c_str());
   LogCvmfs(kLogDownload, kLogDebug, "%d proxies remain in group",
            group_size - opt_proxy_groups_current_burned_);
-
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -1993,9 +1957,8 @@ void DownloadManager::SwitchProxy(JobInfo *info) {
 void DownloadManager::SwitchHost(JobInfo *info) {
   bool do_switch = true;
 
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   if (!opt_host_chain_ || (opt_host_chain_->size() == 1)) {
-    pthread_mutex_unlock(lock_options_);
     return;
   }
 
@@ -2033,7 +1996,6 @@ void DownloadManager::SwitchHost(JobInfo *info) {
       }
     }
   }
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -2087,13 +2049,12 @@ void DownloadManager::ProbeHosts() {
     if (host_rtt[i] == INT_MAX) host_rtt[i] = kProbeDown;
   }
 
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   delete opt_host_chain_;
   delete opt_host_chain_rtt_;
   opt_host_chain_ = new vector<string>(host_chain);
   opt_host_chain_rtt_ = new vector<int>(host_rtt);
   opt_host_chain_current_ = 0;
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -2120,10 +2081,11 @@ bool DownloadManager::GeoSortServers(std::vector<std::string> *servers,
   std::string host_list = JoinStrings(server_dns_names, ",");
 
   // Protect against concurrent access to prng_
-  pthread_mutex_lock(lock_options_);
-  // Determine random hosts for the Geo-API query
-  vector<string> host_chain_shuffled = Shuffle(host_chain, &prng_);
-  pthread_mutex_unlock(lock_options_);
+  vector<string> host_chain_shuffled;
+  {  MutexLockGuard guard(lock_options_);
+     // Determine random hosts for the Geo-API query
+     host_chain_shuffled = Shuffle(host_chain, &prng_);
+  }
 
   // Request ordered list via Geo-API
   bool success = false;
@@ -2221,7 +2183,7 @@ bool DownloadManager::ProbeGeo() {
   }
 
   // Re-install host chain and proxy chain
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   delete opt_host_chain_;
   opt_num_proxies_ = 0;
   opt_host_chain_ = new vector<string>(host_chain.size());
@@ -2275,7 +2237,6 @@ bool DownloadManager::ProbeGeo() {
   delete opt_host_chain_rtt_;
   opt_host_chain_rtt_ = new vector<int>(host_chain.size(), kProbeGeo);
   opt_host_chain_current_ = 0;
-  pthread_mutex_unlock(lock_options_);
 
   return true;
 }
@@ -2373,7 +2334,7 @@ void DownloadManager::SetProxyChain(
   const string &fallback_proxy_list,
   const ProxySetModes set_mode)
 {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
 
   opt_timestamp_backup_proxies_ = 0;
   opt_timestamp_failover_proxies_ = 0;
@@ -2412,7 +2373,6 @@ void DownloadManager::SetProxyChain(
     opt_proxy_groups_current_burned_ = 0;
     opt_proxy_groups_fallback_ = 0;
     opt_num_proxies_ = 0;
-    pthread_mutex_unlock(lock_options_);
     return;
   }
 
@@ -2513,8 +2473,6 @@ void DownloadManager::SetProxyChain(
     // LogCvmfs(kLogDownload, kLogSyslog, "using proxy %s",
     //          (*opt_proxy_groups_)[0][0].c_str());
   }
-
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -2530,10 +2488,9 @@ void DownloadManager::GetProxyInfo(vector< vector<ProxyInfo> > *proxy_chain,
 {
   assert(proxy_chain != NULL);
 
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
 
   if (!opt_proxy_groups_) {
-    pthread_mutex_unlock(lock_options_);
     vector< vector<ProxyInfo> > empty_chain;
     *proxy_chain = empty_chain;
     if (current_group != NULL)
@@ -2548,8 +2505,6 @@ void DownloadManager::GetProxyInfo(vector< vector<ProxyInfo> > *proxy_chain,
     *current_group = opt_proxy_groups_current_;
   if (fallback_group != NULL)
     *fallback_group = opt_proxy_groups_fallback_;
-
-  pthread_mutex_unlock(lock_options_);
 }
 
 string DownloadManager::GetProxyList() {
@@ -2580,9 +2535,8 @@ void DownloadManager::RebalanceProxiesUnlocked() {
 
 
 void DownloadManager::RebalanceProxies() {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   RebalanceProxiesUnlocked();
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -2590,10 +2544,9 @@ void DownloadManager::RebalanceProxies() {
  * Switches to the next load-balancing group of proxy servers.
  */
 void DownloadManager::SwitchProxyGroup() {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
 
   if (!opt_proxy_groups_ || (opt_proxy_groups_->size() < 2)) {
-    pthread_mutex_unlock(lock_options_);
     return;
   }
 
@@ -2607,29 +2560,25 @@ void DownloadManager::SwitchProxyGroup() {
   //          "switching proxy from %s to %s (manual group change)",
   //          old_proxy.c_str(),
   //          (*opt_proxy_groups_)[opt_proxy_groups_current_][0].c_str());
-
-  pthread_mutex_unlock(lock_options_);
 }
 
 
 void DownloadManager::SetProxyGroupResetDelay(const unsigned seconds) {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   opt_proxy_groups_reset_after_ = seconds;
   if (opt_proxy_groups_reset_after_ == 0) {
     opt_timestamp_backup_proxies_ = 0;
     opt_timestamp_failover_proxies_ = 0;
   }
-  pthread_mutex_unlock(lock_options_);
 }
 
 
 void DownloadManager::SetHostResetDelay(const unsigned seconds)
 {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   opt_host_reset_after_ = seconds;
   if (opt_host_reset_after_ == 0)
     opt_timestamp_backup_host_ = 0;
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -2637,18 +2586,16 @@ void DownloadManager::SetRetryParameters(const unsigned max_retries,
                                          const unsigned backoff_init_ms,
                                          const unsigned backoff_max_ms)
 {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   opt_max_retries_ = max_retries;
   opt_backoff_init_ms_ = backoff_init_ms;
   opt_backoff_max_ms_ = backoff_max_ms;
-  pthread_mutex_unlock(lock_options_);
 }
 
 
 void DownloadManager::SetMaxIpaddrPerProxy(unsigned limit) {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   resolver_->set_throttle(limit);
-  pthread_mutex_unlock(lock_options_);
 }
 
 
@@ -2656,10 +2603,9 @@ void DownloadManager::SetProxyTemplates(
   const std::string &direct,
   const std::string &forced)
 {
-  pthread_mutex_lock(lock_options_);
+  MutexLockGuard guard(lock_options_);
   proxy_template_direct_ = direct;
   proxy_template_forced_ = forced;
-  pthread_mutex_unlock(lock_options_);
 }
 
 
