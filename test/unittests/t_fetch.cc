@@ -369,7 +369,7 @@ void *TestFetchCollapse2(void *data) {
   Fetcher *f = reinterpret_cast<Fetcher *>(data);
   BuggyCacheManager *bcm = reinterpret_cast<BuggyCacheManager *>(f->cache_mgr_);
   while (!bcm->continue_ctrltxn) {
-    pthread_mutex_lock(f->lock_queues_download_);
+    MutexLockGuard guard(f->lock_queues_download_);
     Fetcher::ThreadQueues::iterator iDownloadQueue =
       f->queues_download_.begin();
     for (; iDownloadQueue != f->queues_download_.end(); ++iDownloadQueue) {
@@ -379,7 +379,6 @@ void *TestFetchCollapse2(void *data) {
         atomic_inc32(&bcm->continue_ctrltxn);
       }
     }
-    pthread_mutex_unlock(f->lock_queues_download_);
   }
 
   return NULL;
