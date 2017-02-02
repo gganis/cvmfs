@@ -8,8 +8,10 @@
 #include <pthread.h>
 
 #include <cassert>
+#include <errno.h>
 #include <queue>
 #include <set>
+#include <sys/time.h>
 #include <vector>
 
 #include "atomic.h"
@@ -38,6 +40,35 @@ class Lockable : SingleCopy {
  protected:
   Lockable() {
     const int retval = pthread_mutex_init(&mutex_, NULL);
+    assert(retval == 0);
+  }
+
+ private:
+  mutable pthread_mutex_t mutex_;
+};
+
+/**
+ * Implements a simple interface to mutexes.
+ *
+ * Note: a Mutex object should not be copied!
+ */
+class Mutex : SingleCopy {
+ public:
+  inline virtual __attribute__((used)) ~Mutex() {        pthread_mutex_destroy(&mutex_); }
+
+  void Lock()    const       {        pthread_mutex_lock(&mutex_);    }
+  int  TryLock() const       { return pthread_mutex_trylock(&mutex_); }
+  void Unlock()  const       {        pthread_mutex_unlock(&mutex_);  }
+
+  Mutex(bool recursive = false) {
+    pthread_mutexattr_t mtxattr;
+    int retval = pthread_mutexattr_init(&mtxattr);
+    if (!retval && recursive) {
+       retval |= pthread_mutexattr_settype(&mtxattr, PTHREAD_MUTEX_RECURSIVE);
+       retval |= pthread_mutex_init(&mutex_, &mtxattr);
+    } else {
+       retval = pthread_mutex_init(&mutex_, NULL);
+    }
     assert(retval == 0);
   }
 
@@ -82,9 +113,10 @@ class RAII : SingleCopy {
   inline explicit RAII(T *object) : ref_(*object) { Enter(); }
   inline ~RAII()                         { Leave(); }
 
+  inline void Leave() { ref_.Unlock(); }  // for interleaved scopes
+
  protected:
   inline void Enter() { ref_.Lock();   }
-  inline void Leave() { ref_.Unlock(); }
 
  private:
   T &ref_;
@@ -108,13 +140,19 @@ class LockGuard : public RAII<LockableT> {
   inline explicit LockGuard(LockableT *object) : RAII<LockableT>(object) {}
 };
 
-
 template <>
 inline void RAII<pthread_mutex_t>::Enter() { pthread_mutex_lock(&ref_);   }
 template <>
 inline void RAII<pthread_mutex_t>::Leave() { pthread_mutex_unlock(&ref_); }
+#if 0
 typedef RAII<pthread_mutex_t> MutexLockGuard;
-
+#else
+template <>
+inline void RAII<Mutex>::Enter() { ref_.Lock();   }
+template <>
+inline void RAII<Mutex>::Leave() { ref_.Unlock(); }
+typedef RAII<Mutex> MutexLockGuard;
+#endif
 
 template <>
 inline void RAII<pthread_rwlock_t,
@@ -144,6 +182,49 @@ typedef RAII<pthread_rwlock_t, _RAII_Polymorphism::WriteLock> WriteLockGuard;
 // -----------------------------------------------------------------------------
 //
 
+/**
+ * Implements a wrapper class around a condition variable
+ *
+ * Note: a Mutex object should not be copied!
+ */
+class Condition : SingleCopy {
+ public:
+  inline virtual ~Condition() { pthread_mutex_destroy(&mutex_);
+                                pthread_cond_destroy(&cond_); }
+
+  void Lock()    const       { pthread_mutex_lock(&mutex_);    }
+  void Unlock()  const       { pthread_mutex_unlock(&mutex_);  }
+
+  int Broadcast() const      { if (ownmtx_) pthread_mutex_lock(&mutex_);
+                               int rc = pthread_cond_broadcast(&cond_);
+                               if (ownmtx_) pthread_mutex_unlock(&mutex_);
+                               return rc;
+                             }
+
+  int Signal() const         { if (ownmtx_) pthread_mutex_lock(&mutex_);
+                               int rc = pthread_cond_signal(&cond_);
+                               if (ownmtx_) pthread_mutex_unlock(&mutex_);
+                               return rc;
+                             }
+  
+  int Wait() const           { if (ownmtx_) Lock();
+                               int rc = pthread_cond_wait(&cond_, &mutex_);
+                               if (ownmtx_) Unlock();
+                               return rc;
+                            }
+  int Wait(int64_t ms) const;
+
+  Condition(bool ownmtx = true) : ownmtx_(ownmtx) {
+    int retval = pthread_cond_init(&cond_, NULL);
+    retval |= pthread_mutex_init(&mutex_, NULL);
+    assert(retval == 0);
+  }
+
+ private:
+  bool                    ownmtx_;
+  mutable pthread_mutex_t mutex_;
+  mutable pthread_cond_t  cond_;
+};
 
 /**
  * This is a simple implementation of a Future wrapper template.
@@ -224,20 +305,20 @@ class SynchronizingCounter : SingleCopy {
   ~SynchronizingCounter() { Destroy(); }
 
   T Increment() {
-    MutexLockGuard l(mutex_);
+    RAII<pthread_mutex_t> l(mutex_);
     WaitForFreeSlotUnprotected();
     SetValueUnprotected(value_ + T(1));
     return value_;
   }
 
   T Decrement() {
-    MutexLockGuard l(mutex_);
+    RAII<pthread_mutex_t> l(mutex_);
     SetValueUnprotected(value_ - T(1));
     return value_;
   }
 
   void WaitForZero() const {
-    MutexLockGuard l(mutex_);
+    RAII<pthread_mutex_t> l(mutex_);
     while (value_ != T(0)) {
       pthread_cond_wait(&became_zero_, &mutex_);
     }
@@ -253,12 +334,12 @@ class SynchronizingCounter : SingleCopy {
   T operator--(int) { return Decrement() + T(1); }
 
   operator T() const {
-    MutexLockGuard l(mutex_);
+    RAII<pthread_mutex_t> l(mutex_);
     return value_;
   }
 
   SynchronizingCounter<T>& operator=(const T &other) {
-    MutexLockGuard l(mutex_);
+    RAII<pthread_mutex_t>  l(mutex_);
     SetValueUnprotected(other);
     return *this;
   }
@@ -717,15 +798,15 @@ class ConcurrentWorkers : public Observable<typename WorkerT::returned_data> {
   void JobDone(const returned_data_t& data, const bool success = true);
 
   inline void StartRunning()    {
-    MutexLockGuard guard(status_mutex_);
+    RAII<pthread_mutex_t> guard(status_mutex_);
     running_ = true;
   }
   inline void StopRunning()     {
-    MutexLockGuard guard(status_mutex_);
+    RAII<pthread_mutex_t> guard(status_mutex_);
     running_ = false;
   }
   inline bool IsRunning() const {
-    MutexLockGuard guard(status_mutex_);
+    RAII<pthread_mutex_t> guard(status_mutex_);
     return running_;
   }
 
