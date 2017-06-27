@@ -24,8 +24,6 @@
 #ifndef CVMFS_SYNC_MEDIATOR_H_
 #define CVMFS_SYNC_MEDIATOR_H_
 
-// #include <pthread.h>
-
 #include <map>
 #include <set>
 #include <stack>
