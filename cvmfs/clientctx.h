@@ -48,14 +48,8 @@ class ClientCtx {
   static ClientCtx *instance_;
   static void TlsDestructor(void *data);
 
-  ClientCtx();
-
   pthread_key_t thread_local_storage_;
-#if 0
-  pthread_mutex_t *lock_tls_blocks_;
-#else
-  Mutex *lock_tls_blocks_;
-#endif
+  mutable Mutex lock_tls_blocks_;
   std::vector<ThreadLocalStorage *> tls_blocks_;
 };
 
