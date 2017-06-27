@@ -24,7 +24,7 @@
 #ifndef CVMFS_SYNC_MEDIATOR_H_
 #define CVMFS_SYNC_MEDIATOR_H_
 
-#include <pthread.h>
+// #include <pthread.h>
 
 #include <map>
 #include <set>
@@ -39,6 +39,7 @@
 #include "swissknife_sync.h"
 #include "sync_item.h"
 #include "xattr.h"
+#include "util_concurrency.h"
 
 namespace manifest {
 class Manifest;
@@ -205,7 +206,7 @@ class SyncMediator {
    * New and modified files are sent to an external spooler for hashing and
    * compression.  A spooler callback adds them to the catalogs, once processed.
    */
-  pthread_mutex_t lock_file_queue_;
+  Mutex lock_file_queue_;
   SyncItemList file_queue_;
 
   HardlinkGroupList hardlink_queue_;

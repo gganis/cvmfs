@@ -34,21 +34,17 @@ SyncMediator::SyncMediator(catalog::WritableCatalogManager *catalog_manager,
   catalog_manager_(catalog_manager),
   union_engine_(NULL),
   handle_hardlinks_(false),
+  lock_file_queue_(),
   params_(params),
   changed_items_(0)
 {
-  int retval = pthread_mutex_init(&lock_file_queue_, NULL);
-  assert(retval == 0);
-
   params->spooler->RegisterListener(&SyncMediator::PublishFilesCallback, this);
 
   LogCvmfs(kLogPublish, kLogStdout, "Processing changes...");
 }
 
 
-SyncMediator::~SyncMediator() {
-  pthread_mutex_destroy(&lock_file_queue_);
-}
+SyncMediator::~SyncMediator() { }
 
 
 void SyncMediator::RegisterUnionEngine(SyncUnion *engine) {
@@ -706,9 +702,9 @@ void SyncMediator::AddFile(const SyncItem &entry) {
     abort();
   } else {
     // Push the file to the spooler, remember the entry for the path
-    pthread_mutex_lock(&lock_file_queue_);
-    file_queue_[entry.GetUnionPath()] = entry;
-    pthread_mutex_unlock(&lock_file_queue_);
+    {  MutexLockGuard g(lock_file_queue_);
+       file_queue_[entry.GetUnionPath()] = entry;
+    }
     // Spool the file
     params_->spooler->Process(entry.GetUnionPath());
   }
