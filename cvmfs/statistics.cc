@@ -100,17 +100,6 @@ Counter *Statistics::Register(const string &name, const string &desc) {
   return &counter_info->counter;
 }
 
-
-Statistics::Statistics() {
-#if 0
-  lock_ =
-    reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(lock_, NULL);
-  assert(retval == 0);
-#endif
-}
-
-
 Statistics::~Statistics() {
   for (map<string, CounterInfo *>::iterator i = counters_.begin(),
        iEnd = counters_.end(); i != iEnd; ++i)
@@ -119,10 +108,6 @@ Statistics::~Statistics() {
     if (old_value == 1)
       delete i->second;
   }
-#if 0
-  pthread_mutex_destroy(lock_);
-  free(lock_);
-#endif
 }
 
 
