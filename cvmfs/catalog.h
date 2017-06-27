@@ -5,7 +5,7 @@
 #ifndef CVMFS_CATALOG_H_
 #define CVMFS_CATALOG_H_
 
-#include <pthread.h>
+// #include <pthread.h>
 #include <stdint.h>
 
 #include <cassert>
@@ -23,6 +23,7 @@
 #include "sql.h"
 #include "uid_map.h"
 #include "xattr.h"
+#include "util_concurrency.h"
 
 namespace swissknife {
 class CommandMigrate;
@@ -223,7 +224,7 @@ class Catalog : SingleCopy {
   typedef std::map<uint64_t, inode_t> HardlinkGroupMap;
   mutable HardlinkGroupMap hardlink_groups_;
 
-  pthread_mutex_t *lock_;
+  mutable Mutex lock_;
 
   bool InitStandalone(const std::string &database_file);
   bool ReadCatalogCounters();
