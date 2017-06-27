@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "hash.h"
-#include "util/single_copy.h"
+#include "util_concurrency.h"
 
 /**
  * The QuotaManager keeps track of the cache contents.  It is informed by the
@@ -92,6 +92,7 @@ class QuotaManager : SingleCopy {
    * Hashes over the channel identifier mapped to writing ends of pipes.
    */
   std::map<shash::Md5, int> back_channels_;
+#if 0
   pthread_mutex_t *lock_back_channels_;
   void LockBackChannels() {
     int retval = pthread_mutex_lock(lock_back_channels_);
@@ -101,6 +102,10 @@ class QuotaManager : SingleCopy {
     int retval = pthread_mutex_unlock(lock_back_channels_);
     assert(retval == 0);
   }
+#else
+  Mutex lock_back_channels_;
+  Mutex &Locker() {return lock_back_channels_;}
+#endif
 
   /**
    * Protocol of the running cache manager instance.  Needs to be figured out
