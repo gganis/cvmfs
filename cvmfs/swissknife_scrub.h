@@ -13,6 +13,7 @@
 #include "file_processing/async_reader.h"
 #include "file_processing/file.h"
 #include "hash.h"
+#include "util_concurrency.h"
 
 namespace swissknife {
 
@@ -115,7 +116,7 @@ class CommandScrub : public Command {
   ScrubbingReader              *reader_;
 
   mutable unsigned int          alerts_;
-  mutable pthread_mutex_t       alerts_mutex_;
+  mutable Mutex                 alerts_mutex_;
 };
 
 }  // namespace swissknife

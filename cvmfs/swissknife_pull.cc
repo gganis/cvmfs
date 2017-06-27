@@ -12,7 +12,6 @@
 #include "swissknife_pull.h"
 
 #include <inttypes.h>
-#include <pthread.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -38,6 +37,7 @@
 #include "upload.h"
 #include "util/posix.h"
 #include "util/string.h"
+#include "util_concurrency.h"
 
 using namespace std;  // NOLINT
 
@@ -106,7 +106,7 @@ bool                 initial_snapshot = false;
 upload::Spooler     *spooler = NULL;
 int                  pipe_chunks[2];
 // required for concurrent reading
-pthread_mutex_t      lock_pipe = PTHREAD_MUTEX_INITIALIZER;
+Mutex                lock_pipe;
 unsigned             retries = 3;
 catalog::RelaxedPathFilter   *pathfilter = NULL;
 atomic_int64         overall_chunks;
@@ -257,9 +257,9 @@ static void *MainWorker(void *data) {
 
   while (1) {
     ChunkJob next_chunk;
-    pthread_mutex_lock(&lock_pipe);
+    {  MutexLockGuard lock_guard(lock_pipe);
     ReadPipe(pipe_chunks[0], &next_chunk, sizeof(next_chunk));
-    pthread_mutex_unlock(&lock_pipe);
+    }
     if (next_chunk.IsTerminateJob())
       break;
 
