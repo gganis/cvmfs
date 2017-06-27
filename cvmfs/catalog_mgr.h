@@ -248,6 +248,7 @@ class AbstractCatalogManager : public SingleCopy {
 
   CatalogT *FindCatalog(const PathString &path) const;
 
+#if 0
   inline void ReadLock() const {
     int retval = pthread_rwlock_rdlock(rwlock_);
     assert(retval == 0);
@@ -260,6 +261,11 @@ class AbstractCatalogManager : public SingleCopy {
     int retval = pthread_rwlock_unlock(rwlock_);
     assert(retval == 0);
   }
+#else
+  inline void ReadLock() const { rwlock_.RLock(); }
+  inline void WriteLock() const { rwlock_.WLock(); }
+  inline void Unlock() const { rwlock_.Unlock(); }
+#endif
   virtual void EnforceSqliteMemLimit();
 
  private:
@@ -293,7 +299,7 @@ class AbstractCatalogManager : public SingleCopy {
   uint64_t incarnation_;
   // TODO(molina) we could just add an atomic global counter instead
   InodeAnnotation *inode_annotation_;  /**< applied to all catalogs */
-  pthread_rwlock_t *rwlock_;
+  RWLock rwlock_;
   Statistics statistics_;
   pthread_key_t pkey_sqlitemem_;
   OwnerMap uid_map_;

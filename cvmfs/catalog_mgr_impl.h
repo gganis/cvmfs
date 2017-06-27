@@ -34,11 +34,13 @@ AbstractCatalogManager<CatalogT>::AbstractCatalogManager(
   has_authz_cache_ = false;
   inode_annotation_ = NULL;
   incarnation_ = 0;
+#if 0
   rwlock_ =
     reinterpret_cast<pthread_rwlock_t *>(smalloc(sizeof(pthread_rwlock_t)));
   int retval = pthread_rwlock_init(rwlock_, NULL);
   assert(retval == 0);
-  retval = pthread_key_create(&pkey_sqlitemem_, NULL);
+#endif
+  int retval = pthread_key_create(&pkey_sqlitemem_, NULL);
   assert(retval == 0);
 }
 
@@ -46,8 +48,10 @@ template <class CatalogT>
 AbstractCatalogManager<CatalogT>::~AbstractCatalogManager() {
   DetachAll();
   pthread_key_delete(pkey_sqlitemem_);
+#if 0
   pthread_rwlock_destroy(rwlock_);
   free(rwlock_);
+#endif
 }
 
 template <class CatalogT>
