@@ -109,7 +109,7 @@ class RamCacheManager : public CacheManager {
     MemoryKvStore::MemoryAllocator alloc,
     perf::StatisticsTemplate statistics);
 
-  virtual ~RamCacheManager();
+  virtual ~RamCacheManager() { }
 
   virtual bool AcquireQuotaManager(QuotaManager *quota_mgr);
 
@@ -297,7 +297,7 @@ class RamCacheManager : public CacheManager {
 
   uint64_t max_size_;
   FdTable<ReadOnlyHandle> fd_table_;
-  pthread_rwlock_t rwlock_;
+  RWLock rwlock_;
   MemoryKvStore regular_entries_;
   MemoryKvStore volatile_entries_;
   Counters counters_;
