@@ -6,7 +6,7 @@
 #define CVMFS_SQLITEMEM_H_
 
 #include <inttypes.h>
-#include <pthread.h>
+// #include <pthread.h>
 #include <stdint.h>
 
 #include <cassert>
@@ -15,6 +15,7 @@
 
 #include "duplex_sqlite3.h"
 #include "gtest/gtest_prod.h"
+#include "util_concurrency.h"
 
 class MallocArena;
 
@@ -177,7 +178,7 @@ class SqliteMemoryManager {
   void PutMemory(void *ptr);
   int GetMemorySize(void *ptr);
 
-  pthread_mutex_t lock_;
+  Mutex lock_;
 
   /**
    * True if AssignGlobalArenas was called and the memory manager is used by
