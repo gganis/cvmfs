@@ -45,15 +45,8 @@ RamCacheManager::RamCacheManager(
                       perf::StatisticsTemplate("kv.volatile", statistics))
   , counters_(statistics)
 {
-  int retval = pthread_rwlock_init(&rwlock_, NULL);
-  assert(retval == 0);
   LogCvmfs(kLogCache, kLogDebug, "max %u B, %u entries",
            max_size, max_entries);
-}
-
-
-RamCacheManager::~RamCacheManager() {
-  pthread_rwlock_destroy(&rwlock_);
 }
 
 
