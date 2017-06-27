@@ -65,7 +65,7 @@ class Statistics {
     kPrintHeader
   };
 
-  Statistics();
+  Statistics() {}
   ~Statistics();
   Statistics *Fork();
   Counter *Register(const std::string &name, const std::string &desc);
