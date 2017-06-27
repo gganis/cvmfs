@@ -964,10 +964,9 @@ void ExternalQuotaManager::RegisterBackChannel(
 {
   shash::Md5 hash_id = shash::Md5(shash::AsciiPtr(channel_id));
   MakePipe(back_channel);
-  LockBackChannels();
+  MutexLockGuard lock_guard(Locker());
   assert(back_channels_.find(hash_id) == back_channels_.end());
   back_channels_[hash_id] = back_channel[1];
-  UnlockBackChannels();
 }
 
 
@@ -976,8 +975,8 @@ void ExternalQuotaManager::UnregisterBackChannel(
   const string &channel_id)
 {
   shash::Md5 hash_id = shash::Md5(shash::AsciiPtr(channel_id));
-  LockBackChannels();
-  back_channels_.erase(hash_id);
-  UnlockBackChannels();
+  {  MutexLockGuard lock_guard(Locker());
+     back_channels_.erase(hash_id);
+  }
   ClosePipe(back_channel);
 }
