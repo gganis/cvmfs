@@ -138,9 +138,6 @@ class AuthzExternalFetcher : public AuthzFetcher, SingleCopy {
    */
   static const unsigned kDefaultTtl = 120;
 
-#if 0
-  void InitLock();
-#endif
   std::string FindHelper(const std::string &membership);
   void ExecHelper();
   bool Handshake();
