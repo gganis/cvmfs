@@ -5,7 +5,7 @@
 #ifndef CVMFS_STATISTICS_H_
 #define CVMFS_STATISTICS_H_
 
-#include <pthread.h>
+// #include <pthread.h>
 #include <stdint.h>
 
 #include <map>
@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "atomic.h"
+#include "util_concurrency.h"
 
 #ifdef CVMFS_NAMESPACE_GUARD
 namespace CVMFS_NAMESPACE_GUARD {
@@ -85,7 +86,7 @@ class Statistics {
     std::string desc;
   };
   std::map<std::string, CounterInfo *> counters_;
-  pthread_mutex_t *lock_;
+  Mutex lock_;
 };
 
 
