@@ -7,7 +7,7 @@
 #ifndef CVMFS_MOUNTPOINT_H_
 #define CVMFS_MOUNTPOINT_H_
 
-#include <pthread.h>
+// #include <pthread.h>
 #include <unistd.h>
 
 #include <ctime>
@@ -20,6 +20,7 @@
 #include "hash.h"
 #include "loader.h"
 #include "util/pointer.h"
+#include "util_concurrency.h"
 
 class AuthzAttachment;
 class AuthzFetcher;
@@ -505,7 +506,7 @@ class MountPoint : SingleCopy, public BootFactory {
   glue::InodeTracker *inode_tracker_;
 
   unsigned max_ttl_sec_;
-  pthread_mutex_t lock_max_ttl_;
+  Mutex lock_max_ttl_;
   double kcache_timeout_sec_;
   bool fixed_catalog_;
   bool hide_magic_xattrs_;

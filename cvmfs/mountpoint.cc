@@ -1509,19 +1509,16 @@ MountPoint::MountPoint(
   , tracer_(NULL)
   , inode_tracker_(NULL)
   , max_ttl_sec_(kDefaultMaxTtlSec)
+  , lock_max_ttl_()
   , kcache_timeout_sec_(static_cast<double>(kDefaultKCacheTtlSec))
   , fixed_catalog_(false)
   , hide_magic_xattrs_(false)
   , has_membership_req_(false)
 {
-  int retval = pthread_mutex_init(&lock_max_ttl_, NULL);
-  assert(retval == 0);
 }
 
 
 MountPoint::~MountPoint() {
-  pthread_mutex_destroy(&lock_max_ttl_);
-
   delete inode_tracker_;
   delete tracer_;
   delete md5path_cache_;
