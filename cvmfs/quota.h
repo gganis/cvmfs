@@ -52,7 +52,8 @@ class QuotaManager : SingleCopy {
     kCapListeners,
   };
 
-  QuotaManager();
+  QuotaManager() : lock_back_channels_(), protocol_revision_(0) { }
+
   virtual ~QuotaManager();
   virtual bool HasCapability(Capabilities capability) = 0;
 
@@ -92,20 +93,8 @@ class QuotaManager : SingleCopy {
    * Hashes over the channel identifier mapped to writing ends of pipes.
    */
   std::map<shash::Md5, int> back_channels_;
-#if 0
-  pthread_mutex_t *lock_back_channels_;
-  void LockBackChannels() {
-    int retval = pthread_mutex_lock(lock_back_channels_);
-    assert(retval == 0);
-  }
-  void UnlockBackChannels() {
-    int retval = pthread_mutex_unlock(lock_back_channels_);
-    assert(retval == 0);
-  }
-#else
   Mutex lock_back_channels_;
   Mutex &Locker() {return lock_back_channels_;}
-#endif
 
   /**
    * Protocol of the running cache manager instance.  Needs to be figured out

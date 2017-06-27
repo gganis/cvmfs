@@ -50,25 +50,10 @@ void QuotaManager::BroadcastBackchannels(const string &message) {
   }
 }
 
-
-QuotaManager::QuotaManager() : lock_back_channels_(), protocol_revision_(0)  {
-#if 0
-  lock_back_channels_ =
-    reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(lock_back_channels_, NULL);
-  assert(retval == 0);
-#endif
-}
-
-
 QuotaManager::~QuotaManager() {
   for (map<shash::Md5, int>::iterator i = back_channels_.begin(),
        iend = back_channels_.end(); i != iend; ++i)
   {
     close(i->second);
   }
-#if 0
-  pthread_mutex_destroy(lock_back_channels_);
-  free(lock_back_channels_);
-#endif
 }
