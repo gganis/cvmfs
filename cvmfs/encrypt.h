@@ -21,6 +21,7 @@
 #include "gtest/gtest_prod.h"
 #include "hash.h"
 #include "util/single_copy.h"
+#include "util_concurrency.h"
 
 namespace cipher {
 
@@ -69,13 +70,13 @@ class AbstractKeyDatabase {
 
 class MemoryKeyDatabase : SingleCopy, public AbstractKeyDatabase {
  public:
-  MemoryKeyDatabase();
-  virtual ~MemoryKeyDatabase();
+  MemoryKeyDatabase() { }
+  virtual ~MemoryKeyDatabase() { }
   virtual bool StoreNew(const Key *key, std::string *id);
   virtual const Key *Find(const std::string &id);
 
  private:
-  pthread_mutex_t *lock_;
+  Mutex lock_;
   std::map<std::string, const Key *> database_;
 };
 

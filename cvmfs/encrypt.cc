@@ -112,21 +112,6 @@ string Key::ToBase64() const {
 
 //------------------------------------------------------------------------------
 
-
-MemoryKeyDatabase::MemoryKeyDatabase() {
-  lock_ =
-    reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(lock_, NULL);
-  assert(retval == 0);
-}
-
-
-MemoryKeyDatabase::~MemoryKeyDatabase() {
-  pthread_mutex_destroy(lock_);
-  free(lock_);
-}
-
-
 bool MemoryKeyDatabase::StoreNew(const Key *key, string *id) {
   MutexLockGuard mutex_guard(lock_);
   // TODO(jblomer): is this good enough for random keys? Salting? KDF2?
