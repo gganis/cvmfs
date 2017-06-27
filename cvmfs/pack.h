@@ -61,7 +61,7 @@ class ObjectPack : SingleCopy {
    */
   static const uint64_t kMaxObjects = 100000;
 
-  explicit ObjectPack(const uint64_t limit = kDefaultLimit);
+  explicit ObjectPack(const uint64_t limit = kDefaultLimit) : limit_(limit), size_(0) { }
   ~ObjectPack();
 
   static void AddToBucket(const void *buf, const uint64_t size,
@@ -105,12 +105,10 @@ class ObjectPack : SingleCopy {
     std::string name;
   };
 
-  void InitLock();
-
   /**
    * Protects open_buckets_ and buckets_ collections.
    */
-  pthread_mutex_t *lock_;
+  Mutex lock_;
 
   /**
    * Maximum size of this object pack.
