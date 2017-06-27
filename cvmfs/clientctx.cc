@@ -20,17 +20,7 @@ void ClientCtx::CleanupInstance() {
 }
 
 
-ClientCtx::ClientCtx() {
-  lock_tls_blocks_ = reinterpret_cast<pthread_mutex_t *>(
-    smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(lock_tls_blocks_, NULL);
-  assert(retval == 0);
-}
-
-
 ClientCtx::~ClientCtx() {
-  pthread_mutex_destroy(lock_tls_blocks_);
-  free(lock_tls_blocks_);
 
   for (unsigned i = 0; i < tls_blocks_.size(); ++i) {
     delete tls_blocks_[i];

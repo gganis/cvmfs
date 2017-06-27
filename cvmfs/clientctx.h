@@ -11,6 +11,8 @@
 #include <cassert>
 #include <vector>
 
+#include "util_concurrency.h"
+
 /**
  * A client context associates a file system call with the uid, gid, and pid
  * of the calling process.  For the library, that's the current process and
@@ -46,10 +48,8 @@ class ClientCtx {
   static ClientCtx *instance_;
   static void TlsDestructor(void *data);
 
-  ClientCtx();
-
   pthread_key_t thread_local_storage_;
-  pthread_mutex_t *lock_tls_blocks_;
+  mutable Mutex lock_tls_blocks_;
   std::vector<ThreadLocalStorage *> tls_blocks_;
 };
 
