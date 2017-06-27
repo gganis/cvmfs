@@ -227,14 +227,12 @@ void *SqliteMemoryManager::GetMemory(int size) {
 
 
 SqliteMemoryManager::SqliteMemoryManager()
-  : assigned_(false)
+  : lock_(), assigned_(false)
   , scratch_memory_(sxmmap(kScratchSize))
   , page_cache_memory_(sxmmap(kPageCacheSize))
   , idx_last_arena_(0)
 {
   memset(&sqlite3_mem_vanilla_, 0, sizeof(sqlite3_mem_vanilla_));
-  int retval = pthread_mutex_init(&lock_, NULL);
-  assert(retval == 0);
 
   lookaside_buffer_arenas_.push_back(new LookasideBufferArena());
   malloc_arenas_.push_back(new MallocArena(kArenaSize));
@@ -272,7 +270,6 @@ SqliteMemoryManager::~SqliteMemoryManager() {
     delete lookaside_buffer_arenas_[i];
   for (unsigned i = 0; i < malloc_arenas_.size(); ++i)
     delete malloc_arenas_[i];
-  pthread_mutex_destroy(&lock_);
 }
 
 
