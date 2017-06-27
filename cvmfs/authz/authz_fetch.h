@@ -14,7 +14,7 @@
 #include "authz/authz.h"
 #include "gtest/gtest_prod.h"
 #include "json_document.h"
-#include "util/single_copy.h"
+#include "util_concurrency.h"
 
 class OptionsManager;
 
@@ -138,7 +138,9 @@ class AuthzExternalFetcher : public AuthzFetcher, SingleCopy {
    */
   static const unsigned kDefaultTtl = 120;
 
+#if 0
   void InitLock();
+#endif
   std::string FindHelper(const std::string &membership);
   void ExecHelper();
   bool Handshake();
@@ -201,7 +203,7 @@ class AuthzExternalFetcher : public AuthzFetcher, SingleCopy {
   /**
    * The send-receive cycle is atomic.
    */
-  pthread_mutex_t lock_;
+  Mutex lock_;
 };
 
 #endif  // CVMFS_AUTHZ_AUTHZ_FETCH_H_
