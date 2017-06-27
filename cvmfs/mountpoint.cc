@@ -1485,17 +1485,10 @@ MountPoint::MountPoint(
   , hide_magic_xattrs_(false)
   , has_membership_req_(false)
 {
-#if 0
-  int retval = pthread_mutex_init(&lock_max_ttl_, NULL);
-  assert(retval == 0);
-#endif
 }
 
 
 MountPoint::~MountPoint() {
-#if 0
-  pthread_mutex_destroy(&lock_max_ttl_);
-#endif
   delete inode_tracker_;
   delete tracer_;
   delete md5path_cache_;

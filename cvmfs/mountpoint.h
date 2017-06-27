@@ -509,11 +509,7 @@ class MountPoint : SingleCopy, public BootFactory {
   glue::InodeTracker *inode_tracker_;
 
   unsigned max_ttl_sec_;
-#if 0
-  pthread_mutex_t lock_max_ttl_;
-#else
   Mutex lock_max_ttl_;
-#endif
   double kcache_timeout_sec_;
   bool fixed_catalog_;
   bool hide_magic_xattrs_;
