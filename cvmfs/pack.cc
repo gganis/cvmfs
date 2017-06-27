@@ -77,10 +77,6 @@ ObjectPack::Bucket::~Bucket() { free(content); }
 
 //------------------------------------------------------------------------------
 
-ObjectPack::ObjectPack(const uint64_t limit) : limit_(limit), size_(0) {
-  InitLock();
-}
-
 ObjectPack::~ObjectPack() {
   for (std::set<BucketHandle>::const_iterator i = open_buckets_.begin(),
                                               iEnd = open_buckets_.end();
@@ -89,8 +85,6 @@ ObjectPack::~ObjectPack() {
   }
 
   for (unsigned i = 0; i < buckets_.size(); ++i) delete buckets_[i];
-  pthread_mutex_destroy(lock_);
-  free(lock_);
 }
 
 void ObjectPack::AddToBucket(const void *buf, const uint64_t size,
@@ -133,12 +127,6 @@ void ObjectPack::DiscardBucket(const BucketHandle handle) {
   MutexLockGuard mutex_guard(lock_);
   open_buckets_.erase(handle);
   delete handle;
-}
-
-void ObjectPack::InitLock() {
-  lock_ = reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(lock_, NULL);
-  assert(retval == 0);
 }
 
 /**
