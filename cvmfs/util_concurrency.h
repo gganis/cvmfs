@@ -144,15 +144,11 @@ template <>
 inline void RAII<pthread_mutex_t>::Enter() { pthread_mutex_lock(&ref_);   }
 template <>
 inline void RAII<pthread_mutex_t>::Leave() { pthread_mutex_unlock(&ref_); }
-#if 0
-typedef RAII<pthread_mutex_t> MutexLockGuard;
-#else
 template <>
 inline void RAII<Mutex>::Enter() { ref_.Lock();   }
 template <>
 inline void RAII<Mutex>::Leave() { ref_.Unlock(); }
 typedef RAII<Mutex> MutexLockGuard;
-#endif
 
 template <>
 inline void RAII<pthread_rwlock_t,
