@@ -125,16 +125,12 @@ void SynchronizingCounter<T>::Destroy() {
 
 
 template <typename ParamT>
-Observable<ParamT>::Observable() {
-  const int ret = pthread_rwlock_init(&listeners_rw_lock_, NULL);
-  assert(ret == 0);
-}
+Observable<ParamT>::Observable() { }
 
 
 template <typename ParamT>
 Observable<ParamT>::~Observable() {
   UnregisterListeners();
-  pthread_rwlock_destroy(&listeners_rw_lock_);
 }
 
 

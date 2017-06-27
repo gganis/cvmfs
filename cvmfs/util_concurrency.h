@@ -76,6 +76,32 @@ class Mutex : SingleCopy {
   mutable pthread_mutex_t mutex_;
 };
 
+/**
+ * Implements a simple interface to RW locks.
+ *
+ * Note: a RW lock object should not be copied!
+ */
+class RWLock : SingleCopy {
+ public:
+  inline virtual __attribute__((used)) ~RWLock() { pthread_rwlock_destroy(&lock_); }
+
+  void RLock()    const       {        pthread_rwlock_rdlock(&lock_); }
+  int  TryRLock() const       { return pthread_rwlock_tryrdlock(&lock_); }
+
+  void WLock()    const       {        pthread_rwlock_wrlock(&lock_); }
+  int  TryWLock() const       { return pthread_rwlock_trywrlock(&lock_); }
+
+  void Unlock()  const       {        pthread_rwlock_unlock(&lock_);  }
+
+  RWLock() {
+    int retval = pthread_rwlock_init(&lock_, NULL);
+    assert(retval == 0);
+  }
+
+ private:
+  mutable pthread_rwlock_t lock_;
+};
+
 
 //
 // -----------------------------------------------------------------------------
@@ -144,6 +170,7 @@ template <>
 inline void RAII<pthread_mutex_t>::Enter() { pthread_mutex_lock(&ref_);   }
 template <>
 inline void RAII<pthread_mutex_t>::Leave() { pthread_mutex_unlock(&ref_); }
+
 template <>
 inline void RAII<Mutex>::Enter() { ref_.Lock();   }
 template <>
@@ -151,28 +178,15 @@ inline void RAII<Mutex>::Leave() { ref_.Unlock(); }
 typedef RAII<Mutex> MutexLockGuard;
 
 template <>
-inline void RAII<pthread_rwlock_t,
-                 _RAII_Polymorphism::ReadLock>::Enter() {
-  pthread_rwlock_rdlock(&ref_);
-}
+inline void RAII<RWLock, _RAII_Polymorphism::ReadLock>::Enter() { ref_.RLock(); }
 template <>
-inline void RAII<pthread_rwlock_t,
-                 _RAII_Polymorphism::ReadLock>::Leave() {
-  pthread_rwlock_unlock(&ref_);
-}
+inline void RAII<RWLock, _RAII_Polymorphism::ReadLock>::Leave() { ref_.Unlock(); }
 template <>
-inline void RAII<pthread_rwlock_t,
-                 _RAII_Polymorphism::WriteLock>::Enter() {
-  pthread_rwlock_wrlock(&ref_);
-}
+inline void RAII<RWLock, _RAII_Polymorphism::WriteLock>::Enter() { ref_.WLock(); }
 template <>
-inline void RAII<pthread_rwlock_t,
-                 _RAII_Polymorphism::WriteLock>::Leave() {
-  pthread_rwlock_unlock(&ref_);
-}
-typedef RAII<pthread_rwlock_t, _RAII_Polymorphism::ReadLock>  ReadLockGuard;
-typedef RAII<pthread_rwlock_t, _RAII_Polymorphism::WriteLock> WriteLockGuard;
-
+inline void RAII<RWLock, _RAII_Polymorphism::WriteLock>::Leave() { ref_.Unlock(); }
+typedef RAII<RWLock, _RAII_Polymorphism::ReadLock>  ReadLockGuard;
+typedef RAII<RWLock, _RAII_Polymorphism::WriteLock> WriteLockGuard;
 
 //
 // -----------------------------------------------------------------------------
@@ -472,7 +486,7 @@ class Observable : public Callbackable<ParamT>,
  private:
   Callbacks                    listeners_;         //!< the set of registered
                                                    //!< callback objects
-  mutable pthread_rwlock_t     listeners_rw_lock_;
+  mutable RWLock   listeners_rw_lock_;
 };
 
 
