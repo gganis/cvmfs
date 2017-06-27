@@ -362,10 +362,6 @@ ExternalCacheManager::ExternalCacheManager(
 {
   int retval = pthread_rwlock_init(&rwlock_fd_table_, NULL);
   assert(retval == 0);
-  retval = pthread_mutex_init(&lock_send_fd_, NULL);
-  assert(retval == 0);
-  retval = pthread_mutex_init(&lock_inflight_rpcs_, NULL);
-  assert(retval == 0);
   atomic_init64(&next_request_id_);
 }
 
@@ -384,8 +380,6 @@ ExternalCacheManager::~ExternalCacheManager() {
     pthread_join(thread_read_, NULL);
   close(transport_.fd_connection());
   pthread_rwlock_destroy(&rwlock_fd_table_);
-  pthread_mutex_destroy(&lock_send_fd_);
-  pthread_mutex_destroy(&lock_inflight_rpcs_);
 }
 
 

@@ -278,9 +278,9 @@ class ExternalCacheManager : public CacheManager {
   /**
    * Serialize concurrent write access to the session fd
    */
-  pthread_mutex_t lock_send_fd_;
+  Mutex lock_send_fd_;
   std::vector<RpcInFlight> inflight_rpcs_;
-  pthread_mutex_t lock_inflight_rpcs_;
+  Mutex lock_inflight_rpcs_;
   pthread_t thread_read_;
   uint64_t capabilities_;
 };  // class ExternalCacheManager
