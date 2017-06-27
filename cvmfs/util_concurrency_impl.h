@@ -11,6 +11,13 @@
 namespace CVMFS_NAMESPACE_GUARD {
 #endif
 
+//
+// specific guards for internal usage
+template <>
+inline void RAII<pthread_mutex_t>::Enter() { pthread_mutex_lock(&ref_);   }
+template <>
+inline void RAII<pthread_mutex_t>::Leave() { pthread_mutex_unlock(&ref_); }
+
 
 //
 // +----------------------------------------------------------------------------
@@ -125,16 +132,12 @@ void SynchronizingCounter<T>::Destroy() {
 
 
 template <typename ParamT>
-Observable<ParamT>::Observable() {
-  const int ret = pthread_rwlock_init(&listeners_rw_lock_, NULL);
-  assert(ret == 0);
-}
+Observable<ParamT>::Observable() { }
 
 
 template <typename ParamT>
 Observable<ParamT>::~Observable() {
   UnregisterListeners();
-  pthread_rwlock_destroy(&listeners_rw_lock_);
 }
 
 
