@@ -272,7 +272,7 @@ class ExternalCacheManager : public CacheManager {
   uint32_t max_object_size_;
   bool spawned_;
   bool terminated_;
-  pthread_rwlock_t rwlock_fd_table_;
+  RWLock rwlock_fd_table_;
   atomic_int64 next_request_id_;
 
   /**

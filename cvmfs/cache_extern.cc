@@ -360,8 +360,6 @@ ExternalCacheManager::ExternalCacheManager(
   , terminated_(false)
   , capabilities_(cvmfs::CAP_NONE)
 {
-  int retval = pthread_rwlock_init(&rwlock_fd_table_, NULL);
-  assert(retval == 0);
   atomic_init64(&next_request_id_);
 }
 
@@ -379,7 +377,6 @@ ExternalCacheManager::~ExternalCacheManager() {
   if (spawned_)
     pthread_join(thread_read_, NULL);
   close(transport_.fd_connection());
-  pthread_rwlock_destroy(&rwlock_fd_table_);
 }
 
 
