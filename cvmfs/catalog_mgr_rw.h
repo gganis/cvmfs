@@ -83,7 +83,7 @@ class WritableCatalogManager : public SimpleCatalogManager {
                          bool is_balanceable,
                          unsigned max_weight,
                          unsigned min_weight);
-  ~WritableCatalogManager();
+  ~WritableCatalogManager() {}
   static manifest::Manifest *CreateRepository(const std::string &dir_temp,
                                               const bool volatile_content,
                                               const std::string &voms_authz,
@@ -189,13 +189,8 @@ class WritableCatalogManager : public SimpleCatalogManager {
                              const CatalogUploadContext   clg_upload_context);
 
  private:
-#if 0
-  inline void SyncLock() { pthread_mutex_lock(sync_lock_); }
-  inline void SyncUnlock() { pthread_mutex_unlock(sync_lock_); }
-#else
   inline void SyncLock() { sync_lock_.Lock(); }
   inline void SyncUnlock() { sync_lock_.Unlock(); }
-#endif
 
   // defined in catalog_mgr_rw.cc
   static const std::string kCatalogFilename;

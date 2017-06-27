@@ -64,11 +64,6 @@ Catalog::Catalog(const PathString &mountpoint,
 {
   max_row_id_ = 0;
   inode_annotation_ = NULL;
-#if 0
-  lock_ = reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(lock_, NULL);
-  assert(retval == 0);
-#endif
   database_ = NULL;
   uid_map_ = NULL;
   gid_map_ = NULL;
@@ -84,10 +79,6 @@ Catalog::Catalog(const PathString &mountpoint,
 
 
 Catalog::~Catalog() {
-#if 0
-  pthread_mutex_destroy(lock_);
-  free(lock_);
-#endif
   FinalizePreparedStatements();
   delete database_;
 }

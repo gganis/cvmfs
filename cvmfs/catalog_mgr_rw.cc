@@ -49,28 +49,7 @@ WritableCatalogManager::WritableCatalogManager(
   , min_weight_(min_weight)
   , balance_weight_(max_weight / 2)
 {
-#if 0
-  sync_lock_ =
-    reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(sync_lock_, NULL);
-  assert(retval == 0);
-  catalog_processing_lock_ =
-    reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  retval = pthread_mutex_init(catalog_processing_lock_, NULL);
-  assert(retval == 0);
-#endif
 }
-
-
-WritableCatalogManager::~WritableCatalogManager() {
-#if 0
-  pthread_mutex_destroy(sync_lock_);
-  free(sync_lock_);
-  pthread_mutex_destroy(catalog_processing_lock_);
-  free(catalog_processing_lock_);
-#endif
-}
-
 
 /**
  * This method is virtual in AbstractCatalogManager.  It returns a new catalog
