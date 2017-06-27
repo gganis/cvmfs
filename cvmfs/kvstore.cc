@@ -46,8 +46,6 @@ MemoryKvStore::MemoryKvStore(
   , heap_(NULL)
   , counters_(statistics)
 {
-  int retval = pthread_rwlock_init(&rwlock_, NULL);
-  assert(retval == 0);
   switch (alloc) {
     case kMallocHeap:
       heap_ = new MallocHeap(alloc_size,
@@ -61,7 +59,6 @@ MemoryKvStore::MemoryKvStore(
 
 MemoryKvStore::~MemoryKvStore() {
   delete heap_;
-  pthread_rwlock_destroy(&rwlock_);
 }
 
 

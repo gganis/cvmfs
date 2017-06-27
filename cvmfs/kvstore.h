@@ -216,7 +216,7 @@ class MemoryKvStore : SingleCopy, public Callbackable<MallocHeap::BlockPtr> {
   unsigned int max_entries_;
   lru::LruCache<shash::Any, MemoryBuffer> entries_;
   MallocHeap *heap_;
-  pthread_rwlock_t rwlock_;
+  RWLock rwlock_;
   Counters counters_;
 };
 
