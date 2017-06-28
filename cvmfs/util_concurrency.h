@@ -13,6 +13,7 @@
 #include <set>
 #include <sys/time.h>
 #include <vector>
+#include <openssl/crypto.h>
 
 #include "atomic.h"
 #include "util/async.h"
@@ -74,6 +75,46 @@ class Mutex : SingleCopy {
 
  private:
   mutable pthread_mutex_t mutex_;
+};
+
+
+class CryptoMutexArray : SingleCopy {
+
+ public:
+  inline virtual __attribute__((used)) ~CryptoMutexArray() {
+     for (unsigned int i = 0; i < num; ++i) {
+        pthread_mutex_destroy(&(mutex_[i]));
+     }
+     OPENSSL_free(mutex_);
+  }
+
+  int  Lock(unsigned int i)    const       { if (i >= num) return (int)EINVAL; return pthread_mutex_lock(&mutex_[i]);    }
+  int  TryLock(unsigned int i) const       { if (i >= num) return (int)EINVAL; return pthread_mutex_trylock(&mutex_[i]); }
+  int  Unlock(unsigned int i)  const       { if (i >= num) return (int)EINVAL; return pthread_mutex_unlock(&mutex_[i]);  }
+
+  CryptoMutexArray(int nthreads, bool recursive = false) : num((unsigned int)nthreads), mutex_(NULL) {
+
+    int retval = 0;
+    if ((mutex_ = static_cast<pthread_mutex_t *>(OPENSSL_malloc( num * sizeof(pthread_mutex_t))))) {
+       pthread_mutexattr_t mtxattr;
+       retval |= pthread_mutexattr_init(&mtxattr);
+       if (!retval && recursive) {
+          retval |= pthread_mutexattr_settype(&mtxattr, PTHREAD_MUTEX_RECURSIVE);
+          for (unsigned int i = 0; i < num && !retval; ++i) {
+             retval |= pthread_mutex_init(&(mutex_[i]), &mtxattr);
+          }
+       } else {
+          for (unsigned int i = 0; i < num && !retval; ++i) {
+             retval = pthread_mutex_init(&(mutex_[i]), NULL);
+          }
+       }
+    }
+    assert(retval == 0);
+ }
+
+ private:
+  unsigned int  num;
+  mutable pthread_mutex_t *mutex_;
 };
 
 /**
