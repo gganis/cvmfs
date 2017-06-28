@@ -61,70 +61,66 @@ TEST(T_UtilConcurrency, MutexLockGuard) {
 
 
 TEST(T_UtilConcurrency, ReadLockGuard) {
-  pthread_rwlock_t rwlock;
-  int retcode = pthread_rwlock_init(&rwlock, NULL);
-  ASSERT_EQ(0, retcode);
+
+  RWLock lock;
 
   {
-    ReadLockGuard lock(rwlock);
+    ReadLockGuard guard(lock);
 
-    retcode = pthread_rwlock_tryrdlock(&rwlock);
+    retcode = lock.TryRLock();
     EXPECT_EQ(0, retcode) << "ReadLockGuard prevents additional read lock";
 
-    retcode = pthread_rwlock_unlock(&rwlock);
+    retcode = lock.Unlock();
     EXPECT_EQ(0, retcode);
 
-    retcode = pthread_rwlock_trywrlock(&rwlock);
+    retcode = lock.TryWLock();
     EXPECT_EQ(EBUSY, retcode) <<
       "ReadLockGuard allows concurrent read and write";
   }
 
-  retcode = pthread_rwlock_trywrlock(&rwlock);
+  retcode = lock.TryWLock();
   EXPECT_EQ(0, retcode) << "ReadLockGuard didn't unlock";
 
-  retcode = pthread_rwlock_unlock(&rwlock);
+  retcode = lock.Unlock();
   EXPECT_EQ(0, retcode);
 
-  retcode = pthread_rwlock_destroy(&rwlock);
-  EXPECT_EQ(0, retcode);
 }
 
 
 volatile bool g_acquire_write_lock_killer = true;
 
-void *acquire_write_lock(void *lock) {
-  pthread_rwlock_t &rwlock = *static_cast<pthread_rwlock_t*>(lock);
+void *acquire_write_lock(void *lockp) {
+  RWLock &lock = *static_cast<RWLock*>(lockp);
 
-  WriteLockGuard lck(rwlock);
+  WriteLockGuard guard(lock);
   while (g_acquire_write_lock_killer) { }
   return NULL;
 }
 
 TEST(T_UtilConcurrency, WriteLockGuard) {
-  pthread_rwlock_t rwlock;
-  int retcode = pthread_rwlock_init(&rwlock, NULL);
-  ASSERT_EQ(0, retcode);
+
+  RWLock lock;
 
   pthread_t thread;
   const int res = pthread_create(&thread,
                                   NULL,
                                  &acquire_write_lock,
-                                  static_cast<void*>(&rwlock));
+                                  static_cast<void*>(&lock));
   ASSERT_EQ(0, res);
 
   sleep(1);
   {
-    retcode = pthread_rwlock_tryrdlock(&rwlock);
+    retcode = lock.TryRLock();
     EXPECT_EQ(EBUSY, retcode) << "WriteLockGuard didn't lock - rdlock possible";
     if (0 == retcode) {
-      retcode = pthread_rwlock_unlock(&rwlock);
+      retcode = lock.Unlock();
       ASSERT_EQ(0, retcode);
     }
 
-    retcode = pthread_rwlock_trywrlock(&rwlock);
+    retcode = lock.TryWLock();
     EXPECT_EQ(EBUSY, retcode) << "WriteLockGuard didn't lock - wrlock possible";
     if (0 == retcode) {
-      retcode = pthread_rwlock_unlock(&rwlock);
+      retcode = lock.Unlock();
       ASSERT_EQ(0, retcode);
     }
   }
@@ -132,13 +128,10 @@ TEST(T_UtilConcurrency, WriteLockGuard) {
   g_acquire_write_lock_killer = false;
   pthread_join(thread, NULL);
 
-  retcode = pthread_rwlock_trywrlock(&rwlock);
+  retcode = lock.TryWLock();
   EXPECT_EQ(0, retcode) << "WriteLockGuard didn't unlock";
 
-  retcode = pthread_rwlock_unlock(&rwlock);
-  EXPECT_EQ(0, retcode);
-
-  retcode = pthread_rwlock_destroy(&rwlock);
+  retcode = lock.Unlock();
   EXPECT_EQ(0, retcode);
 }
 
