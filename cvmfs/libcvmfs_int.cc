@@ -16,7 +16,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <google/dense_hash_map>
-#include <openssl/crypto.h>
 #include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -99,12 +98,7 @@ loader::Failures LibGlobals::Initialize(OptionsManager *options_mgr) {
   assert(instance_ != NULL);
 
   // Multi-threaded libcrypto (otherwise done by the loader)
-  instance_->libcrypto_locks_ = static_cast<pthread_mutex_t *>(
-    OPENSSL_malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t)));
-  for (int i = 0; i < CRYPTO_num_locks(); ++i) {
-    int retval = pthread_mutex_init(&(instance_->libcrypto_locks_[i]), NULL);
-    assert(retval == 0);
-  }
+  instance_->libcrypto_locks_ = new CryptoMutexArray(CRYPTO_num_locks());
   CRYPTO_set_id_callback(LibGlobals::CallbackLibcryptoThreadId);
   CRYPTO_set_locking_callback(LibGlobals::CallbackLibcryptoLock);
 
@@ -152,12 +146,10 @@ LibGlobals::~LibGlobals() {
   delete file_system_;
   delete options_mgr_;
 
-  if (libcrypto_locks_) {
-    CRYPTO_set_locking_callback(NULL);
-    for (int i = 0; i < CRYPTO_num_locks(); ++i)
-      pthread_mutex_destroy(&(libcrypto_locks_[i]));
-    OPENSSL_free(libcrypto_locks_);
-  }
+  CRYPTO_set_locking_callback(NULL);
+  if (!libcrypto_locks_) return;
+  delete libcrypto_locks_;
+  libcrypto_locks_ = NULL;
 }
 
 
@@ -170,19 +162,17 @@ void LibGlobals::CallbackLibcryptoLock(
   (void)file;
   (void)line;
 
+  assert(LibGlobals::GetInstance() != 0);
+  CryptoMutexArray *locks = LibGlobals::GetInstance()->libcrypto_locks_;
+  assert(locks != 0);
   int retval;
-  LibGlobals *globals = LibGlobals::GetInstance();
-  pthread_mutex_t *locks = globals->libcrypto_locks_;
-  pthread_mutex_t *lock = &(locks[type]);
-
   if (mode & CRYPTO_LOCK) {
-    retval = pthread_mutex_lock(lock);
+     retval = locks->Lock(type);
   } else {
-    retval = pthread_mutex_unlock(lock);
+     retval = locks->Unlock(type);
   }
   assert(retval == 0);
 }
-
 
 // Type unsigned long required by libcrypto (openssl)
 unsigned long LibGlobals::CallbackLibcryptoThreadId() {  // NOLINT
