@@ -16,6 +16,7 @@
 #include "gtest/gtest_prod.h"
 #include "hash.h"
 #include "sink.h"
+#include "util_concurrency.h"
 
 class BackoffThrottle;
 
@@ -148,14 +149,14 @@ class Fetcher : SingleCopy {
   pthread_key_t thread_local_storage_;
 
   ThreadQueues queues_download_;
-  pthread_mutex_t *lock_queues_download_;
+  SMutex lock_queues_download_;
 
   /**
    * All the threads register their thread local storage here, so that it can
    * be cleaned up properly in the destructor of Fetcher.
    */
   std::vector<ThreadLocalStorage *> tls_blocks_;
-  pthread_mutex_t *lock_tls_blocks_;
+  SMutex lock_tls_blocks_;
 
   CacheManager *cache_mgr_;
   download::DownloadManager *download_mgr_;

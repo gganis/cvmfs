@@ -26,7 +26,7 @@ void TLSDestructor(void *data) {
   std::vector<Fetcher::ThreadLocalStorage *> *tls_blocks =
     &tls->fetcher->tls_blocks_;
 
-  pthread_mutex_lock(tls->fetcher->lock_tls_blocks_);
+  MutexLockGuard guard(tls->fetcher->lock_tls_blocks_);
   for (vector<Fetcher::ThreadLocalStorage *>::iterator i =
        tls_blocks->begin(), iEnd = tls_blocks->end(); i != iEnd; ++i)
   {
@@ -35,7 +35,7 @@ void TLSDestructor(void *data) {
       break;
     }
   }
-  pthread_mutex_unlock(tls->fetcher->lock_tls_blocks_);
+  guard.Leave();
   tls->fetcher->CleanupTls(tls);
 }
 
@@ -67,9 +67,8 @@ Fetcher::ThreadLocalStorage *Fetcher::GetTls() {
   tls->download_job.probe_hosts = true;
   int retval = pthread_setspecific(thread_local_storage_, tls);
   assert(retval == 0);
-  pthread_mutex_lock(lock_tls_blocks_);
+  MutexLockGuard guard(lock_tls_blocks_);
   tls_blocks_.push_back(tls);
-  pthread_mutex_unlock(lock_tls_blocks_);
   return tls;
 }
 
@@ -96,13 +95,13 @@ int Fetcher::Fetch(
 
   // Synchronization point: either act as a master thread for this object or
   // enqueue to the list of waiting threads.
-  pthread_mutex_lock(lock_queues_download_);
+  MutexLockGuard guard(lock_queues_download_);
   ThreadQueues::iterator iDownloadQueue = queues_download_.find(id);
   if (iDownloadQueue != queues_download_.end()) {
     LogCvmfs(kLogCache, kLogDebug, "waiting for download of %s", name.c_str());
 
     iDownloadQueue->second->push_back(tls->pipe_wait[1]);
-    pthread_mutex_unlock(lock_queues_download_);
+    guard.Leave();
     ReadPipe(tls->pipe_wait[0], &fd_return, sizeof(int));
 
     LogCvmfs(kLogCache, kLogDebug, "received from another thread fd %d for %s",
@@ -112,14 +111,13 @@ int Fetcher::Fetch(
     // Seems we are the first one, check again in the cache (race condition)
     fd_return = OpenSelect(id, name, object_type);
     if (fd_return >= 0) {
-      pthread_mutex_unlock(lock_queues_download_);
       return fd_return;
     }
 
     // Create a new queue for this chunk
     queues_download_[id] = &tls->other_pipes_waiting;
-    pthread_mutex_unlock(lock_queues_download_);
   }
+  guard.Leave();
 
   perf::Inc(n_downloads);
 
@@ -206,14 +204,6 @@ Fetcher::Fetcher(
   int retval;
   retval = pthread_key_create(&thread_local_storage_, TLSDestructor);
   assert(retval == 0);
-  lock_queues_download_ = reinterpret_cast<pthread_mutex_t *>(
-    smalloc(sizeof(pthread_mutex_t)));
-  retval = pthread_mutex_init(lock_queues_download_, NULL);
-  assert(retval == 0);
-  lock_tls_blocks_ = reinterpret_cast<pthread_mutex_t *>(
-    smalloc(sizeof(pthread_mutex_t)));
-  retval = pthread_mutex_init(lock_tls_blocks_, NULL);
-  assert(retval == 0);
   n_downloads = statistics.RegisterTemplated("n_downloads",
     "overall number of downloaded files (incl. catalogs, chunks)");
 }
@@ -222,18 +212,10 @@ Fetcher::Fetcher(
 Fetcher::~Fetcher() {
   int retval;
 
-  pthread_mutex_lock(lock_tls_blocks_);
-  for (unsigned i = 0; i < tls_blocks_.size(); ++i)
-    CleanupTls(tls_blocks_[i]);
-  pthread_mutex_unlock(lock_tls_blocks_);
-
-  retval = pthread_mutex_destroy(lock_tls_blocks_);
-  assert(retval == 0);
-  free(lock_tls_blocks_);
-
-  retval = pthread_mutex_destroy(lock_queues_download_);
-  assert(retval == 0);
-  free(lock_queues_download_);
+  {  MutexLockGuard guard(lock_tls_blocks_);
+     for (unsigned i = 0; i < tls_blocks_.size(); ++i)
+        CleanupTls(tls_blocks_[i]);
+  }
 
   retval = pthread_key_delete(thread_local_storage_);
   assert(retval == 0);
@@ -263,14 +245,13 @@ void Fetcher::SignalWaitingThreads(
   const shash::Any &id,
   ThreadLocalStorage *tls)
 {
-  pthread_mutex_lock(lock_queues_download_);
+  MutexLockGuard guard(lock_queues_download_);
   for (unsigned i = 0, s = tls->other_pipes_waiting.size(); i < s; ++i) {
     int fd_dup = (fd >= 0) ? cache_mgr_->Dup(fd) : fd;
     WritePipe(tls->other_pipes_waiting[i], &fd_dup, sizeof(int));
   }
   tls->other_pipes_waiting.clear();
   queues_download_.erase(id);
-  pthread_mutex_unlock(lock_queues_download_);
 }
 
 }  // namespace cvmfs
