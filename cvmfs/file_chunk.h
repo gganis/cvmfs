@@ -23,6 +23,7 @@
 #include "shortstring.h"
 #include "smallhash.h"
 #include "util/single_copy.h"
+#include "util_concurrency.h"
 
 /**
  * Describes a FileChunk as generated from the FileProcessor in collaboration
@@ -95,15 +96,15 @@ struct ChunkTables {
   void InitLocks();
   void InitHashmaps();
 
-  pthread_mutex_t *Handle2Lock(const uint64_t handle) const;
+  SMutex *Handle2Lock(const uint64_t handle) const;
 
   inline void Lock() {
-    int retval = pthread_mutex_lock(lock);
+    int retval = lock.Lock();
     assert(retval == 0);
   }
 
   inline void Unlock() {
-    int retval = pthread_mutex_unlock(lock);
+    int retval = lock.Unlock();
     assert(retval == 0);
   }
 
@@ -119,11 +120,11 @@ struct ChunkTables {
   SmallHashDynamic<uint64_t, ChunkFd> handle2fd;
   // The file descriptors attached to handles need to be locked.
   // Using a hash map to survive with a small, fixed number of locks
-  BigVector<pthread_mutex_t *> handle_locks;
+  BigVector<SMutex *> handle_locks;
   SmallHashDynamic<uint64_t, FileChunkReflist> inode2chunks;
   SmallHashDynamic<uint64_t, uint32_t> inode2references;
   uint64_t next_handle;
-  pthread_mutex_t *lock;
+  SMutex lock;
 };
 
 
@@ -145,7 +146,7 @@ class SimpleChunkTables : SingleCopy {
     FileChunkReflist chunk_reflist;
   };
 
-  SimpleChunkTables();
+  SimpleChunkTables() { }
   ~SimpleChunkTables();
   int Add(FileChunkReflist chunks);
   OpenChunks Get(int fd);
@@ -153,17 +154,17 @@ class SimpleChunkTables : SingleCopy {
 
  private:
   inline void Lock() {
-    int retval = pthread_mutex_lock(lock_);
+    int retval = lock_.Lock();
     assert(retval == 0);
   }
 
   inline void Unlock() {
-    int retval = pthread_mutex_unlock(lock_);
+    int retval = lock_.Unlock();
     assert(retval == 0);
   }
 
   std::vector<OpenChunks> fd_table_;
-  pthread_mutex_t *lock_;
+  SMutex lock_;
 };
 
 #endif  // CVMFS_FILE_CHUNK_H_
