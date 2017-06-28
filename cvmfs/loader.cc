@@ -20,7 +20,6 @@
 #include <errno.h>
 #include <fuse/fuse_lowlevel.h>
 #include <fuse/fuse_opt.h>
-#include <openssl/crypto.h>
 #include <sched.h>
 #include <signal.h>
 #include <stddef.h>
@@ -49,6 +48,7 @@
 #include "sanitizer.h"
 #include "util/posix.h"
 #include "util/string.h"
+#include "util_concurrency.h"
 
 using namespace std;  // NOLINT
 
@@ -546,19 +546,21 @@ using namespace loader;  // NOLINT(build/namespaces)
 // Making OpenSSL (libcrypto) thread-safe
 #ifndef OPENSSL_API_INTERFACE_V11
 
-pthread_mutex_t *gLibcryptoLocks;
+CryptoMutexArray *gLibcryptoLocks = NULL;
 
 static void CallbackLibcryptoLock(int mode, int type,
                                   const char *file, int line) {
   (void)file;
   (void)line;
 
+  assert (gLibcryptoLocks != 0);
+
   int retval;
 
   if (mode & CRYPTO_LOCK) {
-    retval = pthread_mutex_lock(&(gLibcryptoLocks[type]));
+    retval = gLibcryptoLocks->Lock(type) ;
   } else {
-    retval = pthread_mutex_unlock(&(gLibcryptoLocks[type]));
+    retval = gLibcryptoLocks->Unlock(type);
   }
   assert(retval == 0);
 }
@@ -567,32 +569,25 @@ static unsigned long CallbackLibcryptoThreadId() {  // NOLINT(runtime/int)
   return platform_gettid();
 }
 
-#endif
-
 static void SetupLibcryptoMt() {
-#ifndef OPENSSL_API_INTERFACE_V11
-  gLibcryptoLocks = static_cast<pthread_mutex_t *>(OPENSSL_malloc(
-    CRYPTO_num_locks() * sizeof(pthread_mutex_t)));
-  for (int i = 0; i < CRYPTO_num_locks(); ++i) {
-    int retval = pthread_mutex_init(&(gLibcryptoLocks[i]), NULL);
-    assert(retval == 0);
-  }
-
+  gLibcryptoLocks = new CryptoMutexArray(CRYPTO_num_locks());
   CRYPTO_set_id_callback(CallbackLibcryptoThreadId);
   CRYPTO_set_locking_callback(CallbackLibcryptoLock);
-#endif
 }
 
 static void CleanupLibcryptoMt(void) {
-#ifndef OPENSSL_API_INTERFACE_V11
   CRYPTO_set_locking_callback(NULL);
-  for (int i = 0; i < CRYPTO_num_locks(); ++i)
-    pthread_mutex_destroy(&(gLibcryptoLocks[i]));
-
-  OPENSSL_free(gLibcryptoLocks);
-#endif
+  delete gLibcryptoLocks;
+  gLibcryptoLocks = NULL;
 }
 
+#else
+
+static void CallbackLibcryptoLock(int, int, const char *, int) { }
+static void SetupLibcryptoMt() { }
+static void CleanupLibcryptoMt(void) { }
+
+#endif
 
 int main(int argc, char *argv[]) {
   // Set a decent umask for new files (no write access to group/everyone).
