@@ -1001,8 +1001,8 @@ static void cvmfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     unsigned chunk_idx = chunks.FindChunkIdx(off);
 
     // Lock chunk handle
-    pthread_mutex_t *handle_lock = chunk_tables->Handle2Lock(chunk_handle);
-    LockMutex(handle_lock);
+    SMutex *handle_lock = chunk_tables->Handle2Lock(chunk_handle);
+    MutexLockGuard guard(handle_lock);
     chunk_tables->Lock();
     retval = chunk_tables->handle2fd.Lookup(chunk_handle, &chunk_fd);
     assert(retval);
@@ -1041,7 +1041,7 @@ static void cvmfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
           chunk_tables->Lock();
           chunk_tables->handle2fd.Insert(chunk_handle, chunk_fd);
           chunk_tables->Unlock();
-          UnlockMutex(handle_lock);
+          guard.Leave();
           fuse_reply_err(req, EIO);
           return;
         }
@@ -1068,7 +1068,7 @@ static void cvmfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
         chunk_tables->Lock();
         chunk_tables->handle2fd.Insert(chunk_handle, chunk_fd);
         chunk_tables->Unlock();
-        UnlockMutex(handle_lock);
+        guard.Leave();
         fuse_reply_err(req, -bytes_fetched);
         return;
       }
@@ -1084,7 +1084,6 @@ static void cvmfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     chunk_tables->Lock();
     chunk_tables->handle2fd.Insert(chunk_handle, chunk_fd);
     chunk_tables->Unlock();
-    UnlockMutex(handle_lock);
     LogCvmfs(kLogCvmfs, kLogDebug, "released chunk file descriptor %d",
              chunk_fd.fd);
   } else {
