@@ -27,6 +27,7 @@
 #include "lru.h"
 #include "mountpoint.h"
 #include "options.h"
+#include "util_concurrency.h"
 
 
 class CacheManager;
@@ -81,7 +82,7 @@ class LibGlobals : SingleCopy {
   OptionsManager *options_mgr_;
   FileSystem *file_system_;
 
-  pthread_mutex_t  *libcrypto_locks_;
+  CryptoMutexArray *libcrypto_locks_;
 };
 
 
