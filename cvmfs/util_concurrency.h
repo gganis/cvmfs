@@ -16,6 +16,7 @@
 #include <openssl/crypto.h>
 
 #include "atomic.h"
+#include "smalloc.h"
 #include "util/async.h"
 #include "util/single_copy.h"
 
@@ -53,30 +54,66 @@ class Lockable : SingleCopy {
  *
  * Note: a Mutex object should not be copied!
  */
-class Mutex : SingleCopy {
- public:
-  inline virtual __attribute__((used)) ~Mutex() {        pthread_mutex_destroy(&mutex_); }
 
-  void Lock()    const       {        pthread_mutex_lock(&mutex_);    }
-  int  TryLock() const       { return pthread_mutex_trylock(&mutex_); }
-  void Unlock()  const       {        pthread_mutex_unlock(&mutex_);  }
+class MutexBase : SingleCopy {
+ public:
+  inline virtual __attribute__((used)) ~MutexBase() { }
+
+  int Lock()    const       { if (mutex_) return pthread_mutex_lock(mutex_);    return (int)EINVAL; }
+  int TryLock() const       { if (mutex_) return pthread_mutex_trylock(mutex_); return (int)EINVAL; }
+  int Unlock()  const       { if (mutex_) return pthread_mutex_unlock(mutex_);  return (int)EINVAL; }
+
+  MutexBase() : mutex_(NULL) { }
+
+ protected:
+  pthread_mutex_t *mutex_;
+};
+
+
+class Mutex : public MutexBase {
+ public:
+  inline virtual __attribute__((used)) ~Mutex() {        pthread_mutex_destroy(&rmutex_); }
 
   Mutex(bool recursive = false) {
     pthread_mutexattr_t mtxattr;
     int retval = pthread_mutexattr_init(&mtxattr);
     if (!retval && recursive) {
        retval |= pthread_mutexattr_settype(&mtxattr, PTHREAD_MUTEX_RECURSIVE);
-       retval |= pthread_mutex_init(&mutex_, &mtxattr);
+       retval |= pthread_mutex_init(&rmutex_, &mtxattr);
     } else {
-       retval = pthread_mutex_init(&mutex_, NULL);
+       retval = pthread_mutex_init(&rmutex_, NULL);
     }
     assert(retval == 0);
+    mutex_ = &rmutex_;
   }
 
  private:
-  mutable pthread_mutex_t mutex_;
+  mutable pthread_mutex_t rmutex_;
 };
 
+class SMutex : public MutexBase {
+ public:
+  inline virtual __attribute__((used)) ~SMutex() {        pthread_mutex_destroy(mutex_);
+                                                          free(mutex_); mutex_ =  NULL; }
+
+  SMutex(bool recursive = false) : MutexBase() {
+
+    int retval = 0;
+    if ((mutex_ = reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t))))) {
+       pthread_mutexattr_t mtxattr;
+       retval |= pthread_mutexattr_init(&mtxattr);
+       if (!retval && recursive) {
+          retval |= pthread_mutexattr_settype(&mtxattr, PTHREAD_MUTEX_RECURSIVE);
+          retval |= pthread_mutex_init(mutex_, &mtxattr);
+       } else {
+          retval = pthread_mutex_init(mutex_, NULL);
+       }
+    }
+    assert(retval == 0);
+  }
+};
+
+// This is for arrays of mutexex using the OpenSSL allocator
 
 class CryptoMutexArray : SingleCopy {
 
@@ -207,11 +244,19 @@ class LockGuard : public RAII<LockableT> {
   inline explicit LockGuard(LockableT *object) : RAII<LockableT>(object) {}
 };
 
+#if 0
 template <>
 inline void RAII<Mutex>::Enter() { ref_.Lock();   }
 template <>
 inline void RAII<Mutex>::Leave() { ref_.Unlock(); }
 typedef RAII<Mutex> MutexLockGuard;
+#else
+template <>
+inline void RAII<MutexBase>::Enter() { ref_.Lock();   }
+template <>
+inline void RAII<MutexBase>::Leave() { ref_.Unlock(); }
+typedef RAII<MutexBase> MutexLockGuard;
+#endif
 
 template <>
 inline void RAII<RWLock, _RAII_Polymorphism::ReadLock>::Enter() { ref_.RLock(); }
