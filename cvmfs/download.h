@@ -351,7 +351,7 @@ class DownloadManager {
   static const unsigned kDnsDefaultTimeoutMs = 3000;
 
   DownloadManager();
-  ~DownloadManager();
+  ~DownloadManager() { }
 
   static int ParseHttpCode(const char digits[3]);
 
@@ -455,8 +455,9 @@ class DownloadManager {
   uint32_t watch_fds_inuse_;
   uint32_t watch_fds_max_;
 
-  pthread_mutex_t *lock_options_;
-  pthread_mutex_t *lock_synchronous_mode_;
+  SMutex lock_options_;
+  SMutex lock_synchronous_mode_;
+
   char *opt_dns_server_;
   unsigned opt_timeout_proxy_;
   unsigned opt_timeout_direct_;
