@@ -54,15 +54,6 @@ void PathStore::CopyFrom(const PathStore &other) {
 
 //------------------------------------------------------------------------------
 
-
-void InodeTracker::InitLock() {
-  lock_ =
-    reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(lock_, NULL);
-  assert(retval == 0);
-}
-
-
 void InodeTracker::CopyFrom(const InodeTracker &other) {
   assert(other.version_ == kVersion);
   version_ = kVersion;
@@ -75,13 +66,11 @@ void InodeTracker::CopyFrom(const InodeTracker &other) {
 
 InodeTracker::InodeTracker() {
   version_ = kVersion;
-  InitLock();
 }
 
 
 InodeTracker::InodeTracker(const InodeTracker &other) {
   CopyFrom(other);
-  InitLock();
 }
 
 
@@ -91,12 +80,6 @@ InodeTracker &InodeTracker::operator= (const InodeTracker &other) {
 
   CopyFrom(other);
   return *this;
-}
-
-
-InodeTracker::~InodeTracker() {
-  pthread_mutex_destroy(lock_);
-  free(lock_);
 }
 
 }  // namespace glue
