@@ -26,6 +26,7 @@
 #include "smalloc.h"
 #include "util/posix.h"
 #include "util/string.h"
+#include "util_concurrency.h"
 
 #ifndef CVMFS_GLUE_BUFFER_H_
 #define CVMFS_GLUE_BUFFER_H_
@@ -478,7 +479,7 @@ class InodeTracker {
   InodeTracker();
   explicit InodeTracker(const InodeTracker &other);
   InodeTracker &operator= (const InodeTracker &other);
-  ~InodeTracker();
+  ~InodeTracker() { }
 
   void VfsGetBy(const uint64_t inode, const uint32_t by, const PathString &path)
   {
@@ -565,19 +566,17 @@ class InodeTracker {
  private:
   static const unsigned kVersion = 4;
 
-  void InitLock();
   void CopyFrom(const InodeTracker &other);
   inline void Lock() const {
-    int retval = pthread_mutex_lock(lock_);
+    int retval = lock_.Lock();
     assert(retval == 0);
   }
   inline void Unlock() const {
-    int retval = pthread_mutex_unlock(lock_);
+    int retval = lock_.Unlock();
     assert(retval == 0);
   }
-
   unsigned version_;
-  pthread_mutex_t *lock_;
+  mutable SMutex lock_;
   PathMap path_map_;
   InodeMap inode_map_;
   InodeReferences inode_references_;
