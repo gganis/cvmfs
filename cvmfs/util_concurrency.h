@@ -91,7 +91,7 @@ class RWLock : SingleCopy {
   void WLock()    const       {        pthread_rwlock_wrlock(&lock_); }
   int  TryWLock() const       { return pthread_rwlock_trywrlock(&lock_); }
 
-  void Unlock()  const       {        pthread_rwlock_unlock(&lock_);  }
+  int  Unlock()   const       { return pthread_rwlock_unlock(&lock_);  }
 
   RWLock() {
     int retval = pthread_rwlock_init(&lock_, NULL);
@@ -165,11 +165,6 @@ class LockGuard : public RAII<LockableT> {
  public:
   inline explicit LockGuard(LockableT *object) : RAII<LockableT>(object) {}
 };
-
-template <>
-inline void RAII<pthread_mutex_t>::Enter() { pthread_mutex_lock(&ref_);   }
-template <>
-inline void RAII<pthread_mutex_t>::Leave() { pthread_mutex_unlock(&ref_); }
 
 template <>
 inline void RAII<Mutex>::Enter() { ref_.Lock();   }

@@ -11,6 +11,13 @@
 namespace CVMFS_NAMESPACE_GUARD {
 #endif
 
+//
+// specific guards for internal usage
+template <>
+inline void RAII<pthread_mutex_t>::Enter() { pthread_mutex_lock(&ref_);   }
+template <>
+inline void RAII<pthread_mutex_t>::Leave() { pthread_mutex_unlock(&ref_); }
+
 
 //
 // +----------------------------------------------------------------------------
