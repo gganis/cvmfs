@@ -14,7 +14,7 @@
 
 #include "atomic.h"
 #include "shortstring.h"
-#include "util/single_copy.h"
+#include "util_concurrency.h"
 
 /**
  * Tracer is a thread-safe logging helper.  It uses a ring buffer
@@ -109,10 +109,8 @@ class Tracer : SingleCopy {
    */
   atomic_int32 *commit_buffer_;
   pthread_t thread_flush_;
-  pthread_cond_t sig_flush_;
-  pthread_mutex_t sig_flush_mutex_;
-  pthread_cond_t sig_continue_trace_;
-  pthread_mutex_t sig_continue_trace_mutex_;
+  Condition sig_flush_;
+  Condition sig_continue_trace_;
   /**
    * Starts with 0 and gets incremented by each call to trace.  Contains the first
    * non-used sequence number.
