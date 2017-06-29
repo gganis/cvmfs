@@ -20,6 +20,7 @@
 #include "file_processing/file.h"
 #include "file_processing/processor.h"
 #include "upload_facility.h"
+#include "util_concurrency.h"
 
 namespace upload {
 
@@ -131,19 +132,12 @@ class IoDispatcher {
     chunks_in_flight_  = 0;
     file_count_        = 0;
     reader_.Initialize();
-    const bool mutex_inits_successful = (
-      pthread_mutex_init(&processing_done_mutex_,    NULL) == 0 &&
-      pthread_cond_init(&processing_done_condition_, NULL) == 0);
-    assert(mutex_inits_successful);
   }
 
   ~IoDispatcher() {
     Wait();
 
     reader_.TearDown();
-
-    pthread_mutex_destroy(&processing_done_mutex_);
-    pthread_cond_destroy(&processing_done_condition_);
   }
 
   /**
@@ -154,11 +148,9 @@ class IoDispatcher {
   void Wait() {
     reader_.Wait();
 
-    pthread_mutex_lock(&processing_done_mutex_);
     while (chunks_in_flight_ > 0) {
-      pthread_cond_wait(&processing_done_condition_, &processing_done_mutex_);
+      processing_done_condition_.Wait();
     }
-    pthread_mutex_unlock(&processing_done_mutex_);
   }
 
   /**
@@ -218,8 +210,7 @@ class IoDispatcher {
   tbb::atomic<unsigned int> chunks_in_flight_;
   tbb::atomic<unsigned int> file_count_;  ///< overall number of processed files
 
-  pthread_mutex_t processing_done_mutex_;
-  pthread_cond_t processing_done_condition_;
+  Condition processing_done_condition_;
 
   Reader<FileScrubbingTask, File> reader_;  ///< dedicated File Reader object
 
