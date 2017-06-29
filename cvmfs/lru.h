@@ -51,9 +51,11 @@
 #include "atomic.h"
 #include "platform.h"
 #include "smallhash.h"
-#include "smalloc.h"
 #include "statistics.h"
 #include "util/single_copy.h"
+#ifdef LRU_CACHE_THREAD_SAFE
+#include "util_concurrency.h"
+#endif
 
 namespace lru {
 
@@ -526,10 +528,6 @@ class LruCache : SingleCopy {
     perf::Xadd(counters_.sz_allocated, allocator_.bytes_allocated() +
                   cache_.bytes_allocated());
 
-#ifdef LRU_CACHE_THREAD_SAFE
-    int retval = pthread_mutex_init(&lock_, NULL);
-    assert(retval == 0);
-#endif
   }
 
   static double GetEntrySize() {
@@ -537,11 +535,7 @@ class LruCache : SingleCopy {
            ConcreteMemoryAllocator::GetEntrySize();
   }
 
-  virtual ~LruCache() {
-#ifdef LRU_CACHE_THREAD_SAFE
-    pthread_mutex_destroy(&lock_);
-#endif
-  }
+  virtual ~LruCache() { }
 
   /**
    * Insert a new key-value pair to the list.
@@ -593,7 +587,7 @@ class LruCache : SingleCopy {
    * present.
    */
   virtual void Update(const Key &key) {
-    Lock();
+    MutexLockGuard guard(lock_);
     // Is not called from the client, only from the cache plugin
     assert(!pause_);
     CacheEntry entry;
@@ -601,7 +595,6 @@ class LruCache : SingleCopy {
     assert(retval);
     perf::Inc(counters_.n_update);
     Touch(entry);
-    Unlock();
   }
 
 
@@ -610,22 +603,19 @@ class LruCache : SingleCopy {
    * order.
    */
   virtual bool UpdateValue(const Key &key, const Value &value) {
-    this->Lock();
+    MutexLockGuard guard(lock_);
     if (pause_) {
-      Unlock();
       return false;
     }
 
     CacheEntry entry;
     if (!this->DoLookup(key, &entry)) {
-      this->Unlock();
       return false;
     }
 
     perf::Inc(counters_.n_update_value);
     entry.value = value;
     cache_.Insert(key, entry);
-    this->Unlock();
     return true;
   }
 
@@ -639,9 +629,8 @@ class LruCache : SingleCopy {
    */
   virtual bool Lookup(const Key &key, Value *value, bool update_lru = true) {
     bool found = false;
-    Lock();
+    MutexLockGuard guard(lock_);
     if (pause_) {
-      Unlock();
       return false;
     }
 
@@ -657,7 +646,6 @@ class LruCache : SingleCopy {
       perf::Inc(counters_.n_miss);
     }
 
-    Unlock();
     return found;
   }
 
@@ -668,9 +656,8 @@ class LruCache : SingleCopy {
    */
   virtual bool Forget(const Key &key) {
     bool found = false;
-    this->Lock();
+    MutexLockGuard guard(lock_);
     if (pause_) {
-      Unlock();
       return false;
     }
 
@@ -685,7 +672,6 @@ class LruCache : SingleCopy {
       --cache_gauge_;
     }
 
-    this->Unlock();
     return found;
   }
 
@@ -695,7 +681,7 @@ class LruCache : SingleCopy {
    * cache entries may stay in use, we do not call delete on any user data.
    */
   virtual void Drop() {
-    this->Lock();
+    MutexLockGuard guard(lock_);
 
     cache_gauge_ = 0;
     lru_list_.clear();
@@ -705,29 +691,25 @@ class LruCache : SingleCopy {
     perf::Xadd(counters_.sz_allocated, allocator_.bytes_allocated() +
                   cache_.bytes_allocated());
 
-    this->Unlock();
   }
 
   void Pause() {
-    Lock();
+    MutexLockGuard guard(lock_);
     pause_ = true;
-    Unlock();
   }
 
   void Resume() {
-    Lock();
+    MutexLockGuard guard(lock_);
     pause_ = false;
-    Unlock();
   }
 
   inline bool IsFull() const { return cache_gauge_ >= cache_size_; }
   inline bool IsEmpty() const { return cache_gauge_ == 0; }
 
   Counters counters() {
-    Lock();
+    MutexLockGuard guard(lock_);
     cache_.GetCollisionStats(&counters_.num_collisions,
                              &counters_.max_collisions);
-    Unlock();
     return counters_;
   }
 
@@ -835,7 +817,7 @@ class LruCache : SingleCopy {
    */
   inline void Lock() {
 #ifdef LRU_CACHE_THREAD_SAFE
-    pthread_mutex_lock(&lock_);
+    lock_.Lock();
 #endif
   }
 
@@ -844,7 +826,7 @@ class LruCache : SingleCopy {
    */
   inline void Unlock() {
 #ifdef LRU_CACHE_THREAD_SAFE
-    pthread_mutex_unlock(&lock_);
+    lock_.Unlock();
 #endif
   }
 
@@ -867,7 +849,7 @@ class LruCache : SingleCopy {
 
   ListEntry<Key> *filter_entry_;
 #ifdef LRU_CACHE_THREAD_SAFE
-  pthread_mutex_t lock_;  /**< Mutex to make cache thread safe. */
+  Mutex lock_;  /**< Mutex to make cache thread safe. */
 #endif
 };  // class LruCache
 
