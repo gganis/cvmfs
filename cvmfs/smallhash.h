@@ -22,7 +22,7 @@
 #include "atomic.h"
 #include "murmur.h"
 #include "prng.h"
-#include "smalloc.h"
+#include "util_concurrency.h"
 
 /**
  * Hash table with linear probing as collision resolution.  Works only for
@@ -392,20 +392,14 @@ class MultiHash {
     const uint8_t N = num_hashmaps;
     num_hashmaps_ = N;
     hashmaps_ = new SmallHashDynamic<Key, Value>[N]();
-    locks_ =
-      static_cast<pthread_mutex_t *>(smalloc(N * sizeof(pthread_mutex_t)));
+    locks_ = new SMutexArray(N);
     for (uint8_t i = 0; i < N; ++i) {
-      int retval = pthread_mutex_init(&locks_[i], NULL);
-      assert(retval == 0);
       hashmaps_[i].Init(128, empty_key, hasher);
     }
   }
 
   ~MultiHash() {
-    for (uint8_t i = 0; i < num_hashmaps_; ++i) {
-      pthread_mutex_destroy(&locks_[i]);
-    }
-    free(locks_);
+    delete locks_;
     delete[] hashmaps_;
   }
 
@@ -468,18 +462,18 @@ class MultiHash {
   }
 
   inline void Lock(const uint8_t target) {
-    int retval = pthread_mutex_lock(&locks_[target]);
+    int retval = locks_->Lock(target);
     assert(retval == 0);
   }
 
   inline void Unlock(const uint8_t target) {
-    int retval = pthread_mutex_unlock(&locks_[target]);
+    int retval = locks_->Unlock(target);
     assert(retval == 0);
   }
 
   uint8_t num_hashmaps_;
   SmallHashDynamic<Key, Value> *hashmaps_;
-  pthread_mutex_t *locks_;
+  SMutexArray *locks_;
 };
 
 
