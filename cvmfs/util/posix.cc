@@ -49,7 +49,7 @@ using namespace std;  // NOLINT
 namespace CVMFS_NAMESPACE_GUARD {
 #endif
 
-static pthread_mutex_t getumask_mutex = PTHREAD_MUTEX_INITIALIZER;
+static Mutex getumask_mutex;
 
 
 /**
@@ -470,14 +470,14 @@ void SendMsg2Socket(const int fd, const string &msg) {
 }
 
 
-void LockMutex(pthread_mutex_t *mutex) {
-  int retval = pthread_mutex_lock(mutex);
+void LockMutex(Mutex &mutex_) {
+  int retval = mutex_.Lock();
   assert(retval == 0);
 }
 
 
-void UnlockMutex(pthread_mutex_t *mutex) {
-  int retval = pthread_mutex_unlock(mutex);
+void UnlockMutex(Mutex &mutex_) {
+  int retval = mutex_.Unlock();
   assert(retval == 0);
 }
 
@@ -942,10 +942,10 @@ bool GetGidOf(const std::string &groupname, gid_t *gid) {
  *       this function and beware of scalability bottlenecks
  */
 mode_t GetUmask() {
-  LockMutex(&getumask_mutex);
+  LockMutex(getumask_mutex);
   const mode_t my_umask = umask(0);
   umask(my_umask);
-  UnlockMutex(&getumask_mutex);
+  UnlockMutex(getumask_mutex);
   return my_umask;
 }
 
