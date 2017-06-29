@@ -31,6 +31,7 @@
 #include "prng.h"
 #include "util/posix.h"
 #include "util/string.h"
+#include "util_concurrency.h"
 
 using namespace std;  // NOLINT
 
@@ -44,7 +45,7 @@ namespace nfs_shared_maps {
  * just have to live with the performance hit this incurs for now...
  */
 static sqlite3 *db_ = NULL;
-pthread_mutex_t lock_ = PTHREAD_MUTEX_INITIALIZER;
+Mutex lock_;
 
 // Max length of the sql statements below
 static const int kMaxDBSqlLen = 128;
@@ -153,16 +154,16 @@ uint64_t RetryGetInode(const PathString &path, int attempt) {
   }
 
   uint64_t inode;
-  pthread_mutex_lock(&lock_);
+  lock_.Lock();
   inode = FindInode(path);
   if (inode) {
     atomic_inc64(&dbstat_path_found_);
-    pthread_mutex_unlock(&lock_);
+    lock_.Unlock();
     return inode;
   }
   // Inode not found, issue a new one
   inode = IssueInode(path);
-  pthread_mutex_unlock(&lock_);
+  lock_.Unlock();
   if (!inode) {
     inode = RetryGetInode(path, attempt + 1);
   }
@@ -186,27 +187,27 @@ uint64_t GetInode(const PathString &path) {
  */
 bool GetPath(const uint64_t inode, PathString *path) {
   int sqlite_state;
-  pthread_mutex_lock(&lock_);
+  lock_.Lock();
   sqlite_state = sqlite3_bind_int64(stmt_get_path_, 1, inode);
   assert(sqlite_state == SQLITE_OK);
   sqlite_state = sqlite3_step(stmt_get_path_);
   if (sqlite_state == SQLITE_DONE) {
     // Success, but inode not found!
     sqlite3_reset(stmt_get_path_);
-    pthread_mutex_unlock(&lock_);
+    lock_.Unlock();
     return false;
   }
   if (sqlite_state != SQLITE_ROW) {
     LogCvmfs(kLogNfsMaps, kLogSyslogErr,
              "Failed to execute SQL for GetPath (%" PRIu64 "): %s",
              inode, sqlite3_errmsg(db_));
-    pthread_mutex_unlock(&lock_);
+    lock_.Unlock();
     abort();
   }
   const char *raw_path = (const char *)sqlite3_column_text(stmt_get_path_, 0);
   path->Assign(raw_path, strlen(raw_path));
   sqlite3_reset(stmt_get_path_);
-  pthread_mutex_unlock(&lock_);
+  lock_.Unlock();
   atomic_inc64(&dbstat_inode_found_);
   return true;
 }
