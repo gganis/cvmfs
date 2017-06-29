@@ -113,6 +113,7 @@ class SMutex : public MutexBase {
   }
 };
 
+#if 0
 // This is for arrays of mutexex using the OpenSSL allocator
 
 class CryptoMutexArray : SingleCopy {
@@ -153,6 +154,111 @@ class CryptoMutexArray : SingleCopy {
   unsigned int  num;
   mutable pthread_mutex_t *mutex_;
 };
+
+#else
+
+// Arrays of mutexes
+
+
+class MutexArrayBase : SingleCopy {
+
+ public:
+  inline virtual __attribute__((used)) ~MutexArrayBase() { }
+
+  int  Lock(unsigned int i)    const       { if (i >= num) return (int)EINVAL; return pthread_mutex_lock(&mutex_[i]);    }
+  int  TryLock(unsigned int i) const       { if (i >= num) return (int)EINVAL; return pthread_mutex_trylock(&mutex_[i]); }
+  int  Unlock(unsigned int i)  const       { if (i >= num) return (int)EINVAL; return pthread_mutex_unlock(&mutex_[i]);  }
+
+  MutexArrayBase(int nthreads, bool recursive = false) : num((unsigned int)nthreads), mutex_(NULL) {
+
+    mutex_ = Allocate();
+
+    int retval = 0;
+    if (mutex_) {
+       pthread_mutexattr_t mtxattr;
+       retval |= pthread_mutexattr_init(&mtxattr);
+       if (!retval && recursive) {
+          retval |= pthread_mutexattr_settype(&mtxattr, PTHREAD_MUTEX_RECURSIVE);
+          for (unsigned int i = 0; i < num && !retval; ++i) {
+             retval |= pthread_mutex_init(&(mutex_[i]), &mtxattr);
+          }
+       } else {
+          for (unsigned int i = 0; i < num && !retval; ++i) {
+             retval = pthread_mutex_init(&(mutex_[i]), NULL);
+          }
+       }
+    }
+    assert(retval == 0);
+ }
+
+
+ protected:
+  unsigned int  num;
+  mutable pthread_mutex_t *mutex_;
+
+  virtual pthread_mutex_t *Allocate() { return NULL; }
+};
+
+
+// This is for arrays of mutexex using smalloc
+
+class MutexArray : public MutexArrayBase {
+
+ public:
+  inline virtual __attribute__((used)) ~MutexArray() {
+     for (unsigned int i = 0; i < num; ++i) {
+        pthread_mutex_destroy(&(mutex_[i]));
+     }
+     free(mutex_);
+  }
+
+  MutexArray(int nthreads, bool recursive = false) : MutexArrayBase(num, recursive) { }
+
+ protected:
+  pthread_mutex_t *Allocate() { return static_cast<pthread_mutex_t *>(malloc( num * sizeof(pthread_mutex_t))); }
+
+};
+
+// This is for arrays of mutexex using smalloc
+
+class SMutexArray : public MutexArrayBase {
+
+ public:
+  inline virtual __attribute__((used)) ~SMutexArray() {
+     for (unsigned int i = 0; i < num; ++i) {
+        pthread_mutex_destroy(&(mutex_[i]));
+     }
+     free(mutex_);
+  }
+
+  SMutexArray(int nthreads, bool recursive = false) : MutexArrayBase(num, recursive) { }
+
+ protected:
+  pthread_mutex_t *Allocate() { return static_cast<pthread_mutex_t *>(smalloc( num * sizeof(pthread_mutex_t))); }
+
+};
+
+// This is for arrays of mutexex using the OpenSSL allocator
+
+class CryptoMutexArray : public MutexArrayBase {
+
+ public:
+  inline virtual __attribute__((used)) ~CryptoMutexArray() {
+     for (unsigned int i = 0; i < num; ++i) {
+        pthread_mutex_destroy(&(mutex_[i]));
+     }
+     OPENSSL_free(mutex_);
+  }
+
+  CryptoMutexArray(int nthreads, bool recursive = false) : MutexArrayBase(num, recursive) { }
+
+ protected:
+  pthread_mutex_t *Allocate() { return static_cast<pthread_mutex_t *>(OPENSSL_malloc( num * sizeof(pthread_mutex_t))); }
+
+};
+
+#endif
+
 
 /**
  * Implements a simple interface to RW locks.
