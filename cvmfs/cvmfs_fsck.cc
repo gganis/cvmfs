@@ -30,6 +30,7 @@
 #include "platform.h"
 #include "smalloc.h"
 #include "util/posix.h"
+#include "util_concurrency.h"
 
 using namespace std;  // NOLINT
 
@@ -51,7 +52,7 @@ atomic_int32 g_num_tmp_catalog;
 /**
  * Traversal of the file system tree is serialized.
  */
-pthread_mutex_t g_lock_traverse = PTHREAD_MUTEX_INITIALIZER;
+Mutex g_lock_traverse;
 DIR *g_DIRP_current = NULL;
 int g_num_dirs = -1;  /**< Number of cache directories already examined. */
 string *g_current_dir;  /**< Current cache sub directory */
@@ -82,7 +83,7 @@ static void Usage() {
 static bool GetNextFile(string *relative_path, string *hash_name) {
   platform_dirent64 *d = NULL;
 
-  pthread_mutex_lock(&g_lock_traverse);
+  MutexLockGuard guard(g_lock_traverse);
  get_next_file_again:
   while (g_DIRP_current && ((d = platform_readdir(g_DIRP_current)) != NULL)) {
     const string name = d->d_name;
@@ -124,13 +125,11 @@ static bool GetNextFile(string *relative_path, string *hash_name) {
         LogCvmfs(kLogCvmfs, kLogStderr,
                  "Invalid cache directory, %s/%s does not exist",
                  g_cache_dir->c_str(), g_current_dir->c_str());
-        pthread_mutex_unlock(&g_lock_traverse);
         exit(kErrorUnfixed);
       }
       goto get_next_file_again;
     }
   }
-  pthread_mutex_unlock(&g_lock_traverse);
 
   if (d)
     return true;
