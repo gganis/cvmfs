@@ -23,6 +23,7 @@
 #include "hash.h"
 #include "shortstring.h"
 #include "util/algorithm.h"
+#include "util_concurrency.h"
 
 namespace compat {
 
@@ -278,7 +279,7 @@ class InodeTracker {
   InodeTracker() { assert(false); }
   explicit InodeTracker(const InodeTracker &other) { assert(false); }
   InodeTracker &operator= (const InodeTracker &other) { assert(false); }
-  ~InodeTracker();
+  ~InodeTracker() { }
 
   bool VfsGet(const uint64_t inode, const uint64_t parent_inode,
               const NameString &name)
@@ -306,7 +307,7 @@ class InodeTracker {
   }
 
   unsigned version_;
-  pthread_mutex_t *lock_;
+  Mutex lock_;
   InodeContainer inode2path_;
   Statistics statistics_;
 };
@@ -549,10 +550,7 @@ class InodeTracker {
   InodeTracker() { assert(false); }
   explicit InodeTracker(const InodeTracker &other) { assert(false); }
   InodeTracker &operator= (const InodeTracker &other) { assert(false); }
-  ~InodeTracker() {
-    pthread_mutex_destroy(lock_);
-    free(lock_);
-  }
+  ~InodeTracker() { }
   void VfsGetBy(const uint64_t inode, const uint32_t by, const PathString &path)
   {
     assert(false);
@@ -590,7 +588,7 @@ class InodeTracker {
   inline void Unlock() const { assert(false); }
 
   unsigned version_;
-  pthread_mutex_t *lock_;
+  Mutex lock_;
   PathMap path_map_;
   InodeMap inode_map_;
   InodeReferences inode_references_;
@@ -779,10 +777,7 @@ class InodeTracker {
   InodeTracker() { assert(false); }
   explicit InodeTracker(const InodeTracker &other) { assert(false); }
   InodeTracker &operator= (const InodeTracker &other) { assert(false); }
-  ~InodeTracker() {
-    pthread_mutex_destroy(lock_);
-    free(lock_);
-  }
+  ~InodeTracker() { }
   void VfsGetBy(const uint64_t inode, const uint32_t by, const PathString &path)
   {
     assert(false);
@@ -820,7 +815,7 @@ class InodeTracker {
   inline void Unlock() const { assert(false); }
 
   unsigned version_;
-  pthread_mutex_t *lock_;
+  Mutex lock_;
   PathMap path_map_;
   InodeMap inode_map_;
   InodeReferences inode_references_;
@@ -870,7 +865,7 @@ struct ChunkTables {
   void CopyFrom(const ChunkTables &other) { assert(false); }
   void InitLocks() { assert(false); }
   void InitHashmaps() { assert(false); }
-  pthread_mutex_t *Handle2Lock(const uint64_t handle) const { assert(false); }
+  Mutex *Handle2Lock(const uint64_t handle) const { assert(false); }
   inline void Lock() { assert(false); }
   inline void Unlock() { assert(false); }
 
@@ -879,11 +874,11 @@ struct ChunkTables {
   SmallHashDynamic<uint64_t, ::ChunkFd> handle2fd;
   // The file descriptors attached to handles need to be locked.
   // Using a hash map to survive with a small, fixed number of locks
-  BigVector<pthread_mutex_t *> handle_locks;
+  BigVector<Mutex *> handle_locks;
   SmallHashDynamic<uint64_t, FileChunkReflist> inode2chunks;
   SmallHashDynamic<uint64_t, uint32_t> inode2references;
   uint64_t next_handle;
-  pthread_mutex_t *lock;
+  Mutex lock;
 };
 
 void Migrate(ChunkTables *old_tables, ::ChunkTables *new_tables);
@@ -929,7 +924,7 @@ struct ChunkTables {
   void CopyFrom(const ChunkTables &other) { assert(false); }
   void InitLocks() { assert(false); }
   void InitHashmaps() { assert(false); }
-  pthread_mutex_t *Handle2Lock(const uint64_t handle) const { assert(false); }
+  Mutex *Handle2Lock(const uint64_t handle) const { assert(false); }
   inline void Lock() { assert(false); }
   inline void Unlock() { assert(false); }
 
@@ -938,11 +933,11 @@ struct ChunkTables {
   SmallHashDynamic<uint64_t, ::ChunkFd> handle2fd;
   // The file descriptors attached to handles need to be locked.
   // Using a hash map to survive with a small, fixed number of locks
-  BigVector<pthread_mutex_t *> handle_locks;
+  BigVector<Mutex *> handle_locks;
   SmallHashDynamic<uint64_t, FileChunkReflist> inode2chunks;
   SmallHashDynamic<uint64_t, uint32_t> inode2references;
   uint64_t next_handle;
-  pthread_mutex_t *lock;
+  Mutex lock;
 };
 
 void Migrate(ChunkTables *old_tables, ::ChunkTables *new_tables);
@@ -963,7 +958,7 @@ struct ChunkTables {
   void CopyFrom(const ChunkTables &other) { assert(false); }
   void InitLocks() { assert(false); }
   void InitHashmaps() { assert(false); }
-  pthread_mutex_t *Handle2Lock(const uint64_t handle) const { assert(false); }
+  Mutex *Handle2Lock(const uint64_t handle) const { assert(false); }
   inline void Lock() { assert(false); }
   inline void Unlock() { assert(false); }
 
@@ -972,11 +967,11 @@ struct ChunkTables {
   SmallHashDynamic<uint64_t, ::ChunkFd> handle2fd;
   // The file descriptors attached to handles need to be locked.
   // Using a hash map to survive with a small, fixed number of locks
-  BigVector<pthread_mutex_t *> handle_locks;
+  BigVector<Mutex *> handle_locks;
   SmallHashDynamic<uint64_t, FileChunkReflist> inode2chunks;
   SmallHashDynamic<uint64_t, uint32_t> inode2references;
   uint64_t next_handle;
-  pthread_mutex_t *lock;
+  Mutex lock;
 };
 
 void Migrate(ChunkTables *old_tables, ::ChunkTables *new_tables);

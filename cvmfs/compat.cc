@@ -74,12 +74,6 @@ bool InodeContainer::ConstructPath(const uint64_t inode, PathString *path) {
   return retval;
 }
 
-
-InodeTracker::~InodeTracker() {
-  pthread_mutex_destroy(lock_);
-  free(lock_);
-}
-
 void Migrate(InodeTracker *old_tracker, glue::InodeTracker *new_tracker) {
   InodeContainer::InodeMap::const_iterator i, iEnd;
   i = old_tracker->inode2path_.map_.begin();
@@ -171,11 +165,8 @@ void Migrate(InodeTracker *old_tracker, glue::InodeTracker *new_tracker) {
 namespace chunk_tables {
 
 ChunkTables::~ChunkTables() {
-  pthread_mutex_destroy(lock);
-  free(lock);
   for (unsigned i = 0; i < kNumHandleLocks; ++i) {
-    pthread_mutex_destroy(handle_locks.At(i));
-    free(handle_locks.At(i));
+     delete handle_locks.At(i);
   }
 }
 
@@ -217,11 +208,8 @@ void Migrate(ChunkTables *old_tables, ::ChunkTables *new_tables) {
 namespace chunk_tables_v2 {
 
 ChunkTables::~ChunkTables() {
-  pthread_mutex_destroy(lock);
-  free(lock);
   for (unsigned i = 0; i < kNumHandleLocks; ++i) {
-    pthread_mutex_destroy(handle_locks.At(i));
-    free(handle_locks.At(i));
+     delete handle_locks.At(i);
   }
 }
 
@@ -263,11 +251,8 @@ void Migrate(ChunkTables *old_tables, ::ChunkTables *new_tables) {
 namespace chunk_tables_v3 {
 
 ChunkTables::~ChunkTables() {
-  pthread_mutex_destroy(lock);
-  free(lock);
   for (unsigned i = 0; i < kNumHandleLocks; ++i) {
-    pthread_mutex_destroy(handle_locks.At(i));
-    free(handle_locks.At(i));
+     delete handle_locks.At(i);
   }
 }
 
