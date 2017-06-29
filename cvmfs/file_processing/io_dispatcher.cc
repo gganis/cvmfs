@@ -96,11 +96,9 @@ void IoDispatcher::ChunkUploadCompleteCallback(const UploaderResults &results,
 
   chunk->file()->ChunkCommitted(chunk);
 
-  pthread_mutex_lock(&processing_done_mutex_);
   if (--chunks_in_flight_ == 0) {
-      pthread_cond_signal(&processing_done_condition_);
+      processing_done_condition_.Signal();
   }
-  pthread_mutex_unlock(&processing_done_mutex_);
 }
 
 
