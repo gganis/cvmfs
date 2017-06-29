@@ -24,33 +24,20 @@ void BackoffThrottle::Init(const unsigned init_delay_ms,
   reset_after_ms_ = reset_after_ms;
   prng_.InitLocaltime();
 
-  lock_ =
-    reinterpret_cast<pthread_mutex_t *>(smalloc(sizeof(pthread_mutex_t)));
-  int retval = pthread_mutex_init(lock_, NULL);
-  assert(retval == 0);
-
   Reset();
 }
 
-
-BackoffThrottle::~BackoffThrottle() {
-  pthread_mutex_destroy(lock_);
-  free(lock_);
-}
-
-
 void BackoffThrottle::Reset() {
-  pthread_mutex_lock(lock_);
+  MutexLockGuard guard(lock_);
   delay_range_ = 0;
   last_throttle_ = 0;
-  pthread_mutex_unlock(lock_);
 }
 
 
 void BackoffThrottle::Throttle() {
   time_t now = time(NULL);
 
-  pthread_mutex_lock(lock_);
+  lock_.Lock();
   if (unsigned(now - last_throttle_) < reset_after_ms_/1000) {
     if (delay_range_ < max_delay_ms_) {
       if (delay_range_ == 0)
@@ -62,11 +49,11 @@ void BackoffThrottle::Throttle() {
     if (delay > max_delay_ms_)
       delay = max_delay_ms_;
 
-    pthread_mutex_unlock(lock_);
+    lock_.Unlock();
     LogCvmfs(kLogCvmfs, kLogDebug, "backoff throttle %d ms", delay);
     SafeSleepMs(delay);
-    pthread_mutex_lock(lock_);
+    lock_.Lock();
   }
   last_throttle_ = now;
-  pthread_mutex_unlock(lock_);
+  lock_.Unlock();
 }
