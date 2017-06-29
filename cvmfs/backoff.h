@@ -8,7 +8,7 @@
 #include <pthread.h>
 
 #include "prng.h"
-#include "util/single_copy.h"
+#include "util_concurrency.h"
 
 /**
  * When Throttle() is called in quick succession, the exponential backoff will
@@ -33,7 +33,7 @@ class BackoffThrottle : public SingleCopy {
   {
     Init(init_delay_ms, max_delay_ms, reset_after_ms);
   }
-  ~BackoffThrottle();
+  ~BackoffThrottle() { }
   void Throttle();
   void Reset();
 
@@ -47,7 +47,7 @@ class BackoffThrottle : public SingleCopy {
   unsigned reset_after_ms_;
   time_t last_throttle_;
   Prng prng_;
-  pthread_mutex_t *lock_;
+  SMutex lock_;
 };
 
 #endif  // CVMFS_BACKOFF_H_
