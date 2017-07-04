@@ -20,7 +20,7 @@
 
 #include "shortstring.h"
 #include "util/pointer.h"
-#include "util_concurrency.h"
+// #include "util_concurrency.h"
 
 #ifdef CVMFS_NAMESPACE_GUARD
 namespace CVMFS_NAMESPACE_GUARD {
@@ -59,9 +59,10 @@ void ClosePipe(int pipe_fd[2]);
 void Nonblock2Block(int filedes);
 void Block2Nonblock(int filedes);
 void SendMsg2Socket(const int fd, const std::string &msg);
+#if 0
 void LockMutex(Mutex &mutex_);
 void UnlockMutex(Mutex &mutex_);
-
+#endif
 bool SwitchCredentials(const uid_t uid, const gid_t gid,
                        const bool temporarily);
 
