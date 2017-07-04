@@ -14,6 +14,7 @@ set (CVMFS_LOADER_SOURCES
   statistics.cc
   util/posix.cc
   util/string.cc
+  util_mutex.cc
 )
 
 set (CVMFS_CLIENT_SOURCES
@@ -69,6 +70,8 @@ set (CVMFS_CLIENT_SOURCES
   util/posix.cc
   util/string.cc
   util_concurrency.cc
+  util_mutex.cc
+  util_condition.cc
   whitelist.cc
   wpad.cc
   xattr.cc
@@ -133,7 +136,7 @@ set (LIBCVMFS_CACHE_SOURCES
   sanitizer.cc
   util/posix.cc
   util/string.cc
-  util_concurrency.cc
+  util_mutex.cc
 )
 
 set (CVMFS_CACHE_NULL_SOURCES
@@ -157,6 +160,7 @@ set (CVMFS_FSCK_SOURCES
   statistics.cc
   util/posix.cc
   util/string.cc
+  util_mutex.cc
 )
 
 
@@ -246,6 +250,7 @@ set (CVMFS_SWISSKNIFE_SOURCES
   util/posix.cc
   util/string.cc
   util_concurrency.cc
+  util_mutex.cc
   whitelist.cc
   xattr.cc
 )
@@ -336,6 +341,7 @@ set (CVMFS_STRATUM_AGENT_SOURCES
   util/posix.cc
   util/string.cc
   util_concurrency.cc
+  util_mutex.cc
   uuid.cc
   whitelist.cc
 )
@@ -399,6 +405,7 @@ if(BUILD_RECEIVER)
     util/mmap_file.cc
     util/posix.cc
     util/string.cc
+    util_mutex.cc
     uuid.cc
     whitelist.cc
     xattr.cc

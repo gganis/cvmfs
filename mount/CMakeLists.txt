@@ -5,6 +5,7 @@ set (CVMFS_MOUNT_SOURCES
   ${CVMFS_SOURCE_DIR}/sanitizer.cc
   ${CVMFS_SOURCE_DIR}/util/posix.cc
   ${CVMFS_SOURCE_DIR}/util/string.cc
+  ${CVMFS_SOURCE_DIR}/util_mutex.cc
   mount.cvmfs.cc
 )
 
