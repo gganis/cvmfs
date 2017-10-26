@@ -308,19 +308,11 @@ class LockGuard : public RAII<LockableT> {
   inline explicit LockGuard(LockableT *object) : RAII<LockableT>(object) {}
 };
 
-#if 0
-template <>
-inline void RAII<Mutex>::Enter() { ref_.Lock();   }
-template <>
-inline void RAII<Mutex>::Leave() { ref_.Unlock(); }
-typedef RAII<Mutex> MutexLockGuard;
-#else
 template <>
 inline void RAII<MutexBase>::Enter() { ref_.Lock();   }
 template <>
 inline void RAII<MutexBase>::Leave() { ref_.Unlock(); }
 typedef RAII<MutexBase> MutexLockGuard;
-#endif
 
 template <>
 inline void RAII<RWLock, _RAII_Polymorphism::ReadLock>::Enter() { ref_.RLock(); }
@@ -333,6 +325,21 @@ inline void RAII<RWLock, _RAII_Polymorphism::WriteLock>::Leave() { ref_.Unlock()
 typedef RAII<RWLock, _RAII_Polymorphism::ReadLock>  ReadLockGuard;
 typedef RAII<RWLock, _RAII_Polymorphism::WriteLock> WriteLockGuard;
 
+class MutexArrayLockGuard {
+ public:
+  inline explicit MutexArrayLockGuard(MutexArrayBase &object, unsigned int id) : ref_(object), id_(id)  { Enter(); }
+  inline explicit MutexArrayLockGuard(MutexArrayBase *object, unsigned int id) : ref_(*object), id_(id) { Enter(); }
+  inline ~MutexArrayLockGuard()                       { Leave(); }
+
+  inline void Leave() { ref_.Unlock(id_); }  // for interleaved scopes
+
+ protected:
+  inline void Enter() { ref_.Lock(id_);   }
+
+ private:
+  MutexArrayBase &ref_;
+  unsigned id_;
+};
 
 #ifdef CVMFS_NAMESPACE_GUARD
 }  // namespace CVMFS_NAMESPACE_GUARD
