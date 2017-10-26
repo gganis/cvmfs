@@ -69,8 +69,6 @@ SignatureManager::SignatureManager() {
   certificate_ = NULL;
   x509_store_ = NULL;
   x509_lookup_ = NULL;
-  int retval = pthread_mutex_init(&lock_blacklist_, NULL);
-  assert(retval == 0);
 }
 
 
@@ -337,7 +335,7 @@ bool SignatureManager::LoadBlacklist(
   const std::string &path_blacklist,
   bool append)
 {
-  MutexLockGuard lock_guard(&lock_blacklist_);
+  MutexLockGuard lock_guard(lock_blacklist_);
   LogCvmfs(kLogSignature, kLogDebug, "reading from blacklist %s",
            path_blacklist.c_str());
   if (!append)
@@ -365,7 +363,7 @@ bool SignatureManager::LoadBlacklist(
 
 
 vector<string> SignatureManager::GetBlacklist() {
-  MutexLockGuard lock_guard(&lock_blacklist_);
+  MutexLockGuard lock_guard(lock_blacklist_);
   return blacklist_;
 }
 

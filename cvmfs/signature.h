@@ -15,6 +15,8 @@
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
 
+#include "util_concurrency.h"
+
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -81,7 +83,7 @@ class SignatureManager {
   EVP_PKEY *private_key_;
   X509 *certificate_;
   std::vector<RSA *> public_keys_;  /**< Contains cvmfs public master keys */
-  pthread_mutex_t lock_blacklist_;
+  Mutex lock_blacklist_;
   std::vector<std::string> blacklist_;
   X509_STORE *x509_store_;
   X509_LOOKUP *x509_lookup_;
