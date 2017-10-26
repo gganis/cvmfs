@@ -29,6 +29,7 @@
 #include "platform.h"
 #include "smalloc.h"
 #include "util/posix.h"
+#include "util_mutex.h"
 
 using namespace std;  // NOLINT
 
@@ -42,10 +43,10 @@ namespace {
 
 const unsigned kMicroSyslogMax = 500 * 1024;  // rotate after 500kB
 
-pthread_mutex_t lock_stdout = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t lock_stderr = PTHREAD_MUTEX_INITIALIZER;
+Mutex lock_stdout;
+Mutex lock_stderr;
 #ifdef DEBUGMSG
-pthread_mutex_t lock_debug = PTHREAD_MUTEX_INITIALIZER;
+Mutex lock_debug;
 FILE *file_debug = NULL;
 string *path_debug = NULL;
 #endif
@@ -72,10 +73,7 @@ pthread_mutex_t lock_usyslock = PTHREAD_MUTEX_INITIALIZER;
 const unsigned kMaxCustomlog = 3;
 string *customlog_dests[] = {NULL, NULL, NULL};
 int customlog_fds[] = {-1, -1, -1};
-pthread_mutex_t customlog_locks[] = {
-  PTHREAD_MUTEX_INITIALIZER,
-  PTHREAD_MUTEX_INITIALIZER,
-  PTHREAD_MUTEX_INITIALIZER};
+MutexArray customlog_locks(3);
 
 LogLevels min_log_level = kLogNormal;
 static void (*alt_log_func)(const LogSource source, const int mask,
@@ -377,7 +375,8 @@ void LogCvmfs(const LogSource source, const int mask, const char *format, ...) {
 
 #ifdef DEBUGMSG
   if (mask & kLogDebug) {
-    pthread_mutex_lock(&lock_debug);
+
+    MutexLockGuard guard(lock_debug);
 
     // Set the file pointer for debuging to stderr, if necessary
     if (file_debug == NULL) file_debug = stderr;
@@ -388,34 +387,31 @@ void LogCvmfs(const LogSource source, const int mask, const char *format, ...) {
     struct tm now;
     localtime_r(&rawtime, &now);
 
-    if (file_debug == stderr) pthread_mutex_lock(&lock_stderr);
+    if (file_debug == stderr) lock_stderr.Lock();
     fprintf(file_debug, "(%s) %s    [%02d-%02d-%04d %02d:%02d:%02d %s]\n",
             module_names[source], msg, (now.tm_mon) + 1, now.tm_mday,
             (now.tm_year) + 1900, now.tm_hour, now.tm_min, now.tm_sec,
             now.tm_zone);
     fflush(file_debug);
-    if (file_debug == stderr) pthread_mutex_unlock(&lock_stderr);
+    if (file_debug == stderr) lock_stderr.Unlock();
 
-    pthread_mutex_unlock(&lock_debug);
   }
 #endif
 
   if (mask & kLogStdout) {
-    pthread_mutex_lock(&lock_stdout);
+    MutexLockGuard guard(lock_stdout);
     if (mask & kLogShowSource) printf("(%s) ", module_names[source]);
     printf("%s", msg);
     if (!(mask & kLogNoLinebreak)) printf("\n");
     fflush(stdout);
-    pthread_mutex_unlock(&lock_stdout);
   }
 
   if (mask & kLogStderr) {
-    pthread_mutex_lock(&lock_stderr);
+    MutexLockGuard guard(lock_stderr);
     if (mask & kLogShowSource) fprintf(stderr, "(%s) ", module_names[source]);
     fprintf(stderr, "%s", msg);
     if (!(mask & kLogNoLinebreak)) fprintf(stderr, "\n");
     fflush(stderr);
-    pthread_mutex_unlock(&lock_stderr);
   }
 
   if (mask & (kLogSyslog | kLogSyslogWarn | kLogSyslogErr)) {
@@ -467,7 +463,7 @@ void PrintWarning(const string &message) {
  */
 void SetLogCustomFile(unsigned id, const std::string &filename) {
   assert(id < kMaxCustomlog);
-  pthread_mutex_lock(&customlog_locks[id]);
+  MutexArrayLockGuard guard(customlog_locks, id);
 
   if (customlog_fds[id] >= 0) {
     close(customlog_fds[id]);
@@ -477,7 +473,6 @@ void SetLogCustomFile(unsigned id, const std::string &filename) {
   if (filename.empty()) {
     delete customlog_dests[id];
     customlog_dests[id] = NULL;
-    pthread_mutex_unlock(&customlog_locks[id]);
     return;
   }
 
@@ -491,7 +486,6 @@ void SetLogCustomFile(unsigned id, const std::string &filename) {
   delete customlog_dests[id];
   customlog_dests[id] = new string(filename);
 
-  pthread_mutex_unlock(&customlog_locks[id]);
 }
 
 
@@ -499,7 +493,7 @@ static void LogCustom(unsigned id, const std::string &message) {
   assert(id < kMaxCustomlog);
   if (message.size() == 0) return;
 
-  pthread_mutex_lock(&customlog_locks[id]);
+  MutexArrayLockGuard guard(customlog_locks, id);
   assert(customlog_fds[id] >= 0);
 
   bool retval_b = SafeWrite(customlog_fds[id], message.data(), message.size());
@@ -511,8 +505,6 @@ static void LogCustom(unsigned id, const std::string &message) {
   }
   int retval_i = fsync(customlog_fds[id]);
   assert(retval_i == 0);
-
-  pthread_mutex_unlock(&customlog_locks[id]);
 }
 
 
