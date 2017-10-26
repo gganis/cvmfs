@@ -99,15 +99,11 @@ struct Job : SingleCopy {
   Job() : remote_ip(0), fd_stdin(-1), fd_stdout(-1), fd_stderr(-1),
           status(kStatusLimbo), exit_code(-1),
           birth(platform_monotonic_time()), death(0), finish_timestamp(0),
-          pid(0)
+          pid(0), lock()
   {
     memset(&thread_job, 0, sizeof(thread_job));
-    int retval = pthread_mutex_init(&lock, NULL);
-    assert(retval == 0);
   }
-  ~Job() {
-    pthread_mutex_destroy(&lock);
-  }
+  ~Job() { }
   enum Status {
     kStatusLimbo,
     kStatusRunning,
@@ -131,7 +127,7 @@ struct Job : SingleCopy {
   uint64_t death;
   time_t finish_timestamp;
   pid_t pid;
-  pthread_mutex_t lock;
+  Mutex lock;
 };
 
 class UriHandlerReplicate;
@@ -163,7 +159,7 @@ Fence g_fence_configurations;
  * Table of jobs, maps the job id to job information.
  */
 map<string, Job *> g_jobs;
-pthread_mutex_t g_lock_jobs = PTHREAD_MUTEX_INITIALIZER;
+Mutex g_lock_jobs;
 /**
  * Used to control the main thread from signals.
  */
