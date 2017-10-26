@@ -19,7 +19,7 @@
 #include "hash.h"
 #include "murmur.h"
 #include "smallhash.h"
-#include "util/single_copy.h"
+#include "util_concurrency.h"
 
 /**
  * A SessionCtx stores the session information related to the current cache
@@ -56,10 +56,10 @@ class SessionCtx : SingleCopy {
   static SessionCtx *instance_;
   static void TlsDestructor(void *data);
 
-  SessionCtx();
+  SessionCtx() {}
 
   pthread_key_t thread_local_storage_;
-  pthread_mutex_t *lock_tls_blocks_;
+  mutable Mutex lock_tls_blocks_;
   std::vector<ThreadLocalStorage *> tls_blocks_;
 };
 
