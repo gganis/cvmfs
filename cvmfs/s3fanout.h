@@ -184,7 +184,7 @@ class S3FanoutManager : SingleCopy {
 
  public:
   S3FanoutManager();
-  ~S3FanoutManager();
+  ~S3FanoutManager() { }
 
   void Init(const unsigned max_pool_handles);
   void Fini();
@@ -207,10 +207,10 @@ class S3FanoutManager : SingleCopy {
                                 void *userp, void *socketp);
   static void *MainUpload(void *data);
   std::vector<s3fanout::JobInfo*> jobs_todo_;
-  pthread_mutex_t *jobs_todo_lock_;
+  Mutex jobs_todo_lock_;
   std::vector<s3fanout::JobInfo*> jobs_completed_;
-  pthread_mutex_t *jobs_completed_lock_;
-  pthread_mutex_t *curl_handle_lock_;
+  Mutex jobs_completed_lock_;
+  mutable Mutex curl_handle_lock_;
 
   CURL *AcquireCurlHandle() const;
   void ReleaseCurlHandle(JobInfo *info, CURL *handle) const;
@@ -257,7 +257,7 @@ class S3FanoutManager : SingleCopy {
   uint32_t watch_fds_inuse_;
   uint32_t watch_fds_max_;
 
-  pthread_mutex_t *lock_options_;
+  mutable Mutex lock_options_;
   unsigned opt_timeout_;
 
   unsigned opt_max_retries_;
