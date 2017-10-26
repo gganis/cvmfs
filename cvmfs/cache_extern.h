@@ -21,8 +21,8 @@
 #include "gtest/gtest_prod.h"
 #include "hash.h"
 #include "quota.h"
-#include "util/single_copy.h"
 #include "util_concurrency.h"
+#include "util_mutex.h"
 
 
 class ExternalCacheManager : public CacheManager {
@@ -276,15 +276,15 @@ class ExternalCacheManager : public CacheManager {
   uint32_t max_object_size_;
   bool spawned_;
   bool terminated_;
-  pthread_rwlock_t rwlock_fd_table_;
+  RWLock rwlock_fd_table_;
   atomic_int64 next_request_id_;
 
   /**
    * Serialize concurrent write access to the session fd
    */
-  pthread_mutex_t lock_send_fd_;
+  Mutex lock_send_fd_;
   std::vector<RpcInFlight> inflight_rpcs_;
-  pthread_mutex_t lock_inflight_rpcs_;
+  Mutex lock_inflight_rpcs_;
   pthread_t thread_read_;
   uint64_t capabilities_;
 };  // class ExternalCacheManager
