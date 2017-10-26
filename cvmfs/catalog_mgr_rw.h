@@ -87,7 +87,7 @@ class WritableCatalogManager : public SimpleCatalogManager {
                          bool is_balanceable,
                          unsigned max_weight,
                          unsigned min_weight);
-  ~WritableCatalogManager();
+  ~WritableCatalogManager() { }
   static manifest::Manifest *CreateRepository(const std::string &dir_temp,
                                               const bool volatile_content,
                                               const std::string &voms_authz,
@@ -194,8 +194,8 @@ class WritableCatalogManager : public SimpleCatalogManager {
                              const CatalogUploadContext   clg_upload_context);
 
  private:
-  inline void SyncLock() { pthread_mutex_lock(sync_lock_); }
-  inline void SyncUnlock() { pthread_mutex_unlock(sync_lock_); }
+  inline void SyncLock() { sync_lock_.Lock(); }
+  inline void SyncUnlock() { sync_lock_.Unlock(); }
 
   //****************************************************************************
   // Workaround -- Serialized Catalog Committing
@@ -216,10 +216,10 @@ class WritableCatalogManager : public SimpleCatalogManager {
   static const std::string kCatalogFilename;
 
   // private lock of WritableCatalogManager
-  pthread_mutex_t *sync_lock_;
+  mutable Mutex sync_lock_;
   upload::Spooler *spooler_;
 
-  pthread_mutex_t                         *catalog_processing_lock_;
+  mutable Mutex                            catalog_processing_lock_;
   std::map<std::string, WritableCatalog*>  catalog_processing_map_;
 
   // TODO(jblomer): catalog limits should become its own struct
