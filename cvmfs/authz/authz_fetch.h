@@ -14,7 +14,7 @@
 #include "authz/authz.h"
 #include "gtest/gtest_prod.h"
 #include "json_document.h"
-#include "util/single_copy.h"
+#include "util_concurrency.h"
 
 class OptionsManager;
 
@@ -138,7 +138,6 @@ class AuthzExternalFetcher : public AuthzFetcher, SingleCopy {
    */
   static const unsigned kDefaultTtl = 120;
 
-  void InitLock();
   std::string FindHelper(const std::string &membership);
   void ExecHelper();
   bool Handshake();
@@ -203,7 +202,7 @@ class AuthzExternalFetcher : public AuthzFetcher, SingleCopy {
   /**
    * The send-receive cycle is atomic.
    */
-  pthread_mutex_t lock_;
+  Mutex lock_;
 
   /**
    * After the helper process fails, this is set to the time when it should
