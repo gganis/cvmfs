@@ -45,6 +45,7 @@
 #include "fs_traversal.h"
 #include "logging.h"
 #include "platform.h"
+#include "util_concurrency.h"
 
 //using namespace std;  // NOLINT
 
@@ -472,19 +473,6 @@ void Block2Nonblock(int filedes) {
 void SendMsg2Socket(const int fd, const std::string &msg) {
   (void)send(fd, &msg[0], msg.length(), MSG_NOSIGNAL);
 }
-
-
-void LockMutex(Mutex &mutex_) {
-  int retval = mutex_.Lock();
-  assert(retval == 0);
-}
-
-
-void UnlockMutex(Mutex &mutex_) {
-  int retval = mutex_.Unlock();
-  assert(retval == 0);
-}
-
 
 /**
  * set(e){g/u}id wrapper.
