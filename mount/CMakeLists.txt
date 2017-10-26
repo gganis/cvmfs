@@ -5,6 +5,7 @@ set (CVMFS_MOUNT_SOURCES
   ${CVMFS_SOURCE_DIR}/sanitizer.cc
   ${CVMFS_SOURCE_DIR}/util/posix.cc
   ${CVMFS_SOURCE_DIR}/util/string.cc
+  ${CVMFS_SOURCE_DIR}/util_mutex.cc
   mount.cvmfs.cc
 )
 
@@ -15,7 +16,7 @@ else (MACOSX)
 endif (MACOSX)
 
 add_executable (${MOUNT_TARGET_NAME} ${CVMFS_MOUNT_SOURCES})
-target_link_libraries (${MOUNT_TARGET_NAME} pthread)
+target_link_libraries (${MOUNT_TARGET_NAME} ${OPENSSL_LIBRARIES} pthread)
 set (CVMFS_MOUNT_CFLAGS "${CVMFS_MOUNT_CFLAGS} -I${CMAKE_SOURCE_DIR}/cvmfs")
 set_target_properties (${MOUNT_TARGET_NAME} PROPERTIES COMPILE_FLAGS "${CVMFS_MOUNT_CFLAGS}")
 
