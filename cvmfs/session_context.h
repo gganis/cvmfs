@@ -84,7 +84,7 @@ class SessionContextBase {
   std::vector<ObjectPack::BucketHandle> active_handles_;
 
   ObjectPack* current_pack_;
-  pthread_mutex_t current_pack_mtx_;
+  Mutex current_pack_mtx_;
 
   mutable atomic_int64 objects_dispatched_;
   uint64_t bytes_committed_;

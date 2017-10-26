@@ -76,7 +76,7 @@ SessionContextBase::SessionContextBase()
       max_pack_size_(ObjectPack::kDefaultLimit),
       active_handles_(),
       current_pack_(NULL),
-      current_pack_mtx_(),
+      current_pack_mtx_(true),
       objects_dispatched_(0),
       bytes_committed_(0),
       bytes_dispatched_(0) {}
@@ -89,17 +89,6 @@ bool SessionContextBase::Initialize(const std::string& api_url,
                                     const std::string& secret,
                                     uint64_t max_pack_size) {
   bool ret = true;
-
-  // Initialize session context lock
-  pthread_mutexattr_t attr;
-  if (pthread_mutexattr_init(&attr) ||
-      pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE) ||
-      pthread_mutex_init(&current_pack_mtx_, &attr) ||
-      pthread_mutexattr_destroy(&attr)) {
-    LogCvmfs(kLogUploadGateway, kLogStderr,
-             "Could not initialize SessionContext lock.");
-    return false;
-  }
 
   // Set upstream URL and session token
   api_url_ = api_url;
@@ -166,7 +155,6 @@ bool SessionContextBase::Finalize(bool commit, const std::string& old_root_hash,
 
   results &= FinalizeDerived() && (bytes_committed_ == bytes_dispatched_);
 
-  pthread_mutex_destroy(&current_pack_mtx_);
   return results;
 }
 
